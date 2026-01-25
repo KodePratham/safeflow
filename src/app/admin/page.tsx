@@ -45,10 +45,27 @@ const SAFEFLOW_CONTRACT = {
   name: 'safeflow',
 };
 
+// Local/custom USDCx contract for SafeFlow (used for local testing)
 const USDCX_CONTRACT = {
   address: process.env.NEXT_PUBLIC_USDCX_ADDRESS || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM',
   name: 'usdcx',
 };
+
+// Circle's official USDCx contracts on Stacks (from xReserve bridge)
+// These are the real USDCx tokens minted when bridging via Circle xReserve
+// Check: https://docs.stacks.co/learn/bridging/usdcx/contracts for latest addresses
+const CIRCLE_USDCX_CONTRACTS = [
+  // Circle's official USDCx on mainnet
+  { address: 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE', name: 'usdcx' },
+  // Common testnet deployers - Circle may deploy to any of these
+  { address: 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM', name: 'usdcx' },
+  { address: 'ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG', name: 'usdcx' },
+  { address: 'ST3NBRSFKX28FQ2ZJ1MAKX58HKHSDGNV5N7R21XCP', name: 'usdcx' },
+  // User-configured Circle USDCx address from env
+  ...(process.env.NEXT_PUBLIC_CIRCLE_USDCX_ADDRESS 
+    ? [{ address: process.env.NEXT_PUBLIC_CIRCLE_USDCX_ADDRESS, name: 'usdcx' }] 
+    : []),
+];
 
 const network = new StacksTestnet();
 const appConfig = new AppConfig(['store_write', 'publish_data']);
@@ -290,28 +307,96 @@ export default function AdminPage() {
     }
   }, [user.address]);
 
-  // Fetch USDCx balance on Stacks
+  // Fetch USDCx balance on Stacks - checks multiple sources including Circle's official contract
   const fetchUsdcxBalance = useCallback(async () => {
     if (!user.address) return;
     
+    let totalBalance = 0n;
+    const foundBalances: { contract: string; balance: bigint }[] = [];
+    
+    // 1. First, try to fetch from Stacks API to get all fungible token holdings
     try {
-      const result = await callReadOnlyFunction({
-        network,
-        contractAddress: USDCX_CONTRACT.address,
-        contractName: USDCX_CONTRACT.name,
-        functionName: 'get-balance',
-        functionArgs: [principalCV(user.address)],
-        senderAddress: user.address,
-      });
-      
-      const balanceValue = cvToValue(result);
-      // balanceValue is { value: "123456" } format
-      const balance = BigInt(balanceValue.value || balanceValue || 0);
-      setUsdcxBalance(balance);
-    } catch (err) {
-      console.error('Failed to fetch USDCx balance:', err);
-      setUsdcxBalance(0n);
+      const apiUrl = `https://api.testnet.hiro.so/extended/v1/address/${user.address}/balances`;
+      const response = await fetch(apiUrl);
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Check for any USDCx tokens in the fungible_tokens
+        if (data.fungible_tokens) {
+          for (const [tokenId, tokenData] of Object.entries(data.fungible_tokens)) {
+            // Look for USDCx tokens (could be usdcx, usdcx-token, etc.)
+            const lowerTokenId = tokenId.toLowerCase();
+            if (lowerTokenId.includes('usdcx') || lowerTokenId.includes('usdc')) {
+              const tokenBalance = BigInt((tokenData as { balance: string }).balance || '0');
+              if (tokenBalance > 0n) {
+                foundBalances.push({ contract: tokenId, balance: tokenBalance });
+                totalBalance += tokenBalance;
+                console.log(`Found USDCx balance via API: ${tokenId} = ${tokenBalance}`);
+              }
+            }
+          }
+        }
+      }
+    } catch (apiErr) {
+      console.log('API balance fetch failed, falling back to contract calls:', apiErr);
     }
+    
+    // 2. Also try direct contract calls to known USDCx contracts
+    const contractsToTry = [
+      USDCX_CONTRACT,
+      ...CIRCLE_USDCX_CONTRACTS,
+    ];
+    
+    // Dedupe contracts by address
+    const seenAddresses = new Set<string>();
+    const uniqueContracts = contractsToTry.filter(c => {
+      const key = `${c.address}.${c.name}`;
+      if (seenAddresses.has(key)) return false;
+      seenAddresses.add(key);
+      return true;
+    });
+    
+    for (const contract of uniqueContracts) {
+      // Skip if we already found this contract via API
+      const contractId = `${contract.address}.${contract.name}`;
+      if (foundBalances.some(fb => fb.contract.includes(contractId))) {
+        continue;
+      }
+      
+      try {
+        const result = await callReadOnlyFunction({
+          network,
+          contractAddress: contract.address,
+          contractName: contract.name,
+          functionName: 'get-balance',
+          functionArgs: [principalCV(user.address)],
+          senderAddress: user.address,
+        });
+        
+        const balanceValue = cvToValue(result);
+        // balanceValue could be { value: "123456" } or just a number
+        const balance = BigInt(balanceValue?.value || balanceValue || 0);
+        
+        if (balance > 0n) {
+          foundBalances.push({ contract: contractId, balance });
+          totalBalance += balance;
+          console.log(`Found USDCx balance via contract call: ${contractId} = ${balance}`);
+        }
+      } catch (err) {
+        // Contract might not exist or have different interface - that's ok
+        console.log(`Contract ${contractId} not available:`, (err as Error).message);
+      }
+    }
+    
+    // Log summary
+    if (foundBalances.length > 0) {
+      console.log('USDCx balance summary:', foundBalances);
+      console.log('Total USDCx balance:', totalBalance.toString());
+    } else {
+      console.log('No USDCx balance found in any known contracts');
+    }
+    
+    setUsdcxBalance(totalBalance);
   }, [user.address]);
 
   // Load pending bridge transactions from localStorage

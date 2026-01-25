@@ -58,11 +58,19 @@
 | xReserve | `0x008888878f94C0d87defdf0B07f46B93C1934442` |
 | USDC     | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` |
 
-### Stacks Testnet
+### Stacks Contracts
 
-| Contract | Address |
-|----------|---------|
-| USDCx    | `ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.usdcx-v1` |
+Circle deploys two contracts for USDCx on Stacks:
+- **`.usdcx`** - The SIP-010 token contract (holds balances)
+- **`.usdcx-v1`** - The bridge/minting contract (handles xReserve attestations)
+
+| Network | Contract | Address |
+|---------|----------|---------|
+| Mainnet | USDCx Token | `SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.usdcx` |
+| Testnet | USDCx Token | Check [Stacks Docs](https://docs.stacks.co/learn/bridging/usdcx/contracts) |
+
+> **Note**: The SafeFlow app automatically checks multiple known USDCx contract addresses 
+> and also queries the Stacks API for any fungible tokens containing "usdcx" in the name.
 
 ### Constants
 
