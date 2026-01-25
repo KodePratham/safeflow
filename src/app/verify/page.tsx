@@ -94,6 +94,7 @@ export default function VerifyPage() {
   });
 
   const [searchAddress, setSearchAddress] = useState('');
+  const [searchId, setSearchId] = useState(''); // New: search by SafeFlow ID
   const [safeflows, setSafeflows] = useState<SafeFlowInfo[]>([]);
   const [searchedAddress, setSearchedAddress] = useState('');
   const [selectedSafeFlow, setSelectedSafeFlow] = useState<SafeFlowInfo | null>(null);
@@ -146,6 +147,91 @@ export default function VerifyPage() {
     setUser({ address: null, isConnected: false });
   }, []);
 
+  // Search SafeFlow by ID directly
+  const searchSafeFlowById = async () => {
+    if (!searchId || isNaN(Number(searchId))) {
+      setError('Please enter a valid SafeFlow ID (number)');
+      return;
+    }
+
+    setIsSearching(true);
+    setError(null);
+    setSafeflows([]);
+    setSelectedSafeFlow(null);
+
+    try {
+      const sfId = Number(searchId);
+      console.log('Searching for SafeFlow ID:', sfId);
+      console.log('Contract:', SAFEFLOW_CONTRACT.address + '.' + SAFEFLOW_CONTRACT.name);
+
+      const sfResult = await callReadOnlyFunction({
+        network,
+        contractAddress: SAFEFLOW_CONTRACT.address,
+        contractName: SAFEFLOW_CONTRACT.name,
+        functionName: 'get-safeflow',
+        functionArgs: [uintCV(sfId)],
+        senderAddress: user.address || SAFEFLOW_CONTRACT.address,
+      });
+
+      const sf = cvToValue(sfResult);
+      console.log('SafeFlow result:', sf);
+
+      if (!sf) {
+        setError(`SafeFlow #${sfId} not found`);
+        setIsSearching(false);
+        return;
+      }
+
+      const claimableResult = await callReadOnlyFunction({
+        network,
+        contractAddress: SAFEFLOW_CONTRACT.address,
+        contractName: SAFEFLOW_CONTRACT.name,
+        functionName: 'get-claimable-amount',
+        functionArgs: [uintCV(sfId)],
+        senderAddress: user.address || SAFEFLOW_CONTRACT.address,
+      });
+
+      const claimableValue = cvToValue(claimableResult);
+
+      const progressResult = await callReadOnlyFunction({
+        network,
+        contractAddress: SAFEFLOW_CONTRACT.address,
+        contractName: SAFEFLOW_CONTRACT.name,
+        functionName: 'get-safeflow-progress',
+        functionArgs: [uintCV(sfId)],
+        senderAddress: user.address || SAFEFLOW_CONTRACT.address,
+      });
+
+      const progressValue = cvToValue(progressResult);
+
+      const foundSafeflow: SafeFlowInfo = {
+        id: sfId,
+        admin: sf.admin,
+        recipient: sf.recipient,
+        title: sf.title,
+        description: sf.description,
+        totalAmount: BigInt(sf['total-amount']),
+        claimedAmount: BigInt(sf['claimed-amount']),
+        dripRate: BigInt(sf['drip-rate']),
+        dripInterval: sf['drip-interval'],
+        startBlock: Number(sf['start-block']),
+        lastClaimBlock: Number(sf['last-claim-block']),
+        status: Number(sf.status),
+        claimable: BigInt(claimableValue?.value || claimableValue || 0),
+        remaining: BigInt(sf['total-amount']) - BigInt(sf['claimed-amount']),
+        progress: Number(progressValue?.value || progressValue || 0),
+      };
+
+      setSafeflows([foundSafeflow]);
+      setSearchedAddress(sf.recipient);
+    } catch (err) {
+      console.error('Search by ID error:', err);
+      setError(`Failed to fetch SafeFlow #${searchId}. It may not exist.`);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const searchSafeFlows = async (address?: string) => {
     const targetAddress = address || searchAddress;
     
@@ -159,6 +245,9 @@ export default function VerifyPage() {
     setSafeflows([]);
     setSelectedSafeFlow(null);
 
+    console.log('Searching SafeFlows for recipient:', targetAddress);
+    console.log('Contract:', SAFEFLOW_CONTRACT.address + '.' + SAFEFLOW_CONTRACT.name);
+
     try {
       // Get count of SafeFlows for this recipient
       const countResult = await callReadOnlyFunction({
@@ -170,7 +259,9 @@ export default function VerifyPage() {
         senderAddress: targetAddress,
       });
 
-      const count = Number(cvToValue(countResult));
+      const countValue = cvToValue(countResult);
+      const count = Number(countValue);
+      console.log('Recipient SafeFlow count:', count, 'raw:', countValue);
 
       if (count === 0) {
         // This is not an error - just no SafeFlows yet
@@ -182,78 +273,83 @@ export default function VerifyPage() {
       const foundSafeflows: SafeFlowInfo[] = [];
 
       for (let i = 0; i < count; i++) {
-        const idResult = await callReadOnlyFunction({
-          network,
-          contractAddress: SAFEFLOW_CONTRACT.address,
-          contractName: SAFEFLOW_CONTRACT.name,
-          functionName: 'get-recipient-safeflow-id',
-          functionArgs: [principalCV(targetAddress), uintCV(i)],
-          senderAddress: targetAddress,
-        });
+        try {
+          const idResult = await callReadOnlyFunction({
+            network,
+            contractAddress: SAFEFLOW_CONTRACT.address,
+            contractName: SAFEFLOW_CONTRACT.name,
+            functionName: 'get-recipient-safeflow-id',
+            functionArgs: [principalCV(targetAddress), uintCV(i)],
+            senderAddress: targetAddress,
+          });
 
-        const idData = cvToValue(idResult);
-        if (!idData) continue;
+          const idData = cvToValue(idResult);
+          console.log('Recipient SafeFlow ID at index', i, ':', idData);
+          if (!idData) continue;
 
-        const sfId = Number(idData.id);
+          const sfId = Number(idData.id);
 
-        const sfResult = await callReadOnlyFunction({
-          network,
-          contractAddress: SAFEFLOW_CONTRACT.address,
-          contractName: SAFEFLOW_CONTRACT.name,
-          functionName: 'get-safeflow',
-          functionArgs: [uintCV(sfId)],
-          senderAddress: targetAddress,
-        });
+          const sfResult = await callReadOnlyFunction({
+            network,
+            contractAddress: SAFEFLOW_CONTRACT.address,
+            contractName: SAFEFLOW_CONTRACT.name,
+            functionName: 'get-safeflow',
+            functionArgs: [uintCV(sfId)],
+            senderAddress: targetAddress,
+          });
 
-        const sf = cvToValue(sfResult);
-        if (!sf) continue;
+          const sf = cvToValue(sfResult);
+          if (!sf) continue;
 
-        const claimableResult = await callReadOnlyFunction({
-          network,
-          contractAddress: SAFEFLOW_CONTRACT.address,
-          contractName: SAFEFLOW_CONTRACT.name,
-          functionName: 'get-claimable-amount',
-          functionArgs: [uintCV(sfId)],
-          senderAddress: targetAddress,
-        });
+          const claimableResult = await callReadOnlyFunction({
+            network,
+            contractAddress: SAFEFLOW_CONTRACT.address,
+            contractName: SAFEFLOW_CONTRACT.name,
+            functionName: 'get-claimable-amount',
+            functionArgs: [uintCV(sfId)],
+            senderAddress: targetAddress,
+          });
 
-        const claimableValue = cvToValue(claimableResult);
+          const claimableValue = cvToValue(claimableResult);
 
-        const progressResult = await callReadOnlyFunction({
-          network,
-          contractAddress: SAFEFLOW_CONTRACT.address,
-          contractName: SAFEFLOW_CONTRACT.name,
-          functionName: 'get-safeflow-progress',
-          functionArgs: [uintCV(sfId)],
-          senderAddress: targetAddress,
-        });
+          const progressResult = await callReadOnlyFunction({
+            network,
+            contractAddress: SAFEFLOW_CONTRACT.address,
+            contractName: SAFEFLOW_CONTRACT.name,
+            functionName: 'get-safeflow-progress',
+            functionArgs: [uintCV(sfId)],
+            senderAddress: targetAddress,
+          });
 
-        const progressValue = cvToValue(progressResult);
+          const progressValue = cvToValue(progressResult);
 
-        foundSafeflows.push({
-          id: sfId,
-          admin: sf.admin,
-          recipient: sf.recipient,
-          title: sf.title,
-          description: sf.description,
-          totalAmount: BigInt(sf['total-amount']),
-          claimedAmount: BigInt(sf['claimed-amount']),
-          dripRate: BigInt(sf['drip-rate']),
-          dripInterval: sf['drip-interval'],
-          startBlock: Number(sf['start-block']),
-          lastClaimBlock: Number(sf['last-claim-block']),
-          status: Number(sf.status),
-          claimable: BigInt(claimableValue.value || claimableValue || 0),
-          remaining: BigInt(sf['total-amount']) - BigInt(sf['claimed-amount']),
-          progress: Number(progressValue.value || progressValue || 0),
-        });
+          foundSafeflows.push({
+            id: sfId,
+            admin: sf.admin,
+            recipient: sf.recipient,
+            title: sf.title,
+            description: sf.description,
+            totalAmount: BigInt(sf['total-amount']),
+            claimedAmount: BigInt(sf['claimed-amount']),
+            dripRate: BigInt(sf['drip-rate']),
+            dripInterval: sf['drip-interval'],
+            startBlock: Number(sf['start-block']),
+            lastClaimBlock: Number(sf['last-claim-block']),
+            status: Number(sf.status),
+            claimable: BigInt(claimableValue?.value || claimableValue || 0),
+            remaining: BigInt(sf['total-amount']) - BigInt(sf['claimed-amount']),
+            progress: Number(progressValue?.value || progressValue || 0),
+          });
+        } catch (indexErr) {
+          console.error('Error fetching SafeFlow at index', i, ':', indexErr);
+        }
       }
 
       setSafeflows(foundSafeflows);
       setSearchedAddress(targetAddress);
     } catch (err) {
       console.error('Search error:', err);
-      setError('Failed to fetch SafeFlow information.');
+      setError('Failed to fetch SafeFlow information. Check console for details.');
     } finally {
       setIsSearching(false);
     }
@@ -359,6 +455,7 @@ export default function VerifyPage() {
           )}
 
           <div className="card mb-8">
+            <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">Search by Recipient Address</p>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -384,6 +481,27 @@ export default function VerifyPage() {
                 {'>'}Use connected wallet
               </button>
             )}
+
+            <div className="border-t border-gray-800 my-4" />
+            
+            <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">Or Search by SafeFlow ID</p>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={searchId}
+                onChange={(e) => setSearchId(e.target.value)}
+                placeholder="0"
+                className="input flex-1 font-mono text-sm"
+                min="0"
+              />
+              <button
+                onClick={searchSafeFlowById}
+                disabled={isSearching}
+                className="btn-primary px-6"
+              >
+                {isSearching ? '...' : 'LOOKUP'}
+              </button>
+            </div>
           </div>
 
           {safeflows.length > 0 && (

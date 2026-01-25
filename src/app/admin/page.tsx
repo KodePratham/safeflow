@@ -202,6 +202,9 @@ export default function AdminPage() {
   const [pendingBridgeTxs, setPendingBridgeTxs] = useState<PendingBridgeTx[]>([]);
   const BRIDGE_TX_KEY = 'safeflow_pending_bridges';
 
+  // Pending SafeFlow transactions
+  const [pendingSafeFlowTxs, setPendingSafeFlowTxs] = useState<{ txId: string; status: string; timestamp: number }[]>([]);
+
   // Create SafeFlow form
   const [recipientAddress, setRecipientAddress] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
@@ -240,11 +243,17 @@ export default function AdminPage() {
     }
   }, []);
 
-  // Fetch user's SafeFlows
+  // Fetch user's SafeFlows - with API fallback and better error handling
   const fetchMySafeFlows = useCallback(async () => {
     if (!user.address) return;
     
+    console.log('Fetching SafeFlows for admin:', user.address);
+    console.log('Using contract:', SAFEFLOW_CONTRACT.address + '.' + SAFEFLOW_CONTRACT.name);
+    
+    const safeflows: SafeFlowData[] = [];
+    
     try {
+      // Method 1: Try contract read-only calls
       const countResult = await callReadOnlyFunction({
         network,
         contractAddress: SAFEFLOW_CONTRACT.address,
@@ -254,57 +263,132 @@ export default function AdminPage() {
         senderAddress: user.address,
       });
       
-      const count = Number(cvToValue(countResult));
-      const safeflows: SafeFlowData[] = [];
+      const countValue = cvToValue(countResult);
+      const count = Number(countValue);
+      console.log('SafeFlow count from contract:', count, 'raw:', countValue);
       
-      for (let i = 0; i < count; i++) {
-        const idResult = await callReadOnlyFunction({
-          network,
-          contractAddress: SAFEFLOW_CONTRACT.address,
-          contractName: SAFEFLOW_CONTRACT.name,
-          functionName: 'get-admin-safeflow-id',
-          functionArgs: [principalCV(user.address), uintCV(i)],
-          senderAddress: user.address,
-        });
-        
-        const idData = cvToValue(idResult);
-        if (!idData) continue;
-        
-        const sfId = Number(idData.id);
-        
-        const sfResult = await callReadOnlyFunction({
-          network,
-          contractAddress: SAFEFLOW_CONTRACT.address,
-          contractName: SAFEFLOW_CONTRACT.name,
-          functionName: 'get-safeflow',
-          functionArgs: [uintCV(sfId)],
-          senderAddress: user.address,
-        });
-        
-        const sf = cvToValue(sfResult);
-        if (!sf) continue;
-        
-        safeflows.push({
-          id: sfId,
-          admin: sf.admin,
-          recipient: sf.recipient,
-          title: sf.title,
-          description: sf.description,
-          totalAmount: BigInt(sf['total-amount']),
-          claimedAmount: BigInt(sf['claimed-amount']),
-          dripRate: BigInt(sf['drip-rate']),
-          dripInterval: sf['drip-interval'],
-          startBlock: Number(sf['start-block']),
-          lastClaimBlock: Number(sf['last-claim-block']),
-          status: Number(sf.status),
-          createdAt: Number(sf['created-at']),
-        });
+      if (count > 0) {
+        for (let i = 0; i < count; i++) {
+          try {
+            const idResult = await callReadOnlyFunction({
+              network,
+              contractAddress: SAFEFLOW_CONTRACT.address,
+              contractName: SAFEFLOW_CONTRACT.name,
+              functionName: 'get-admin-safeflow-id',
+              functionArgs: [principalCV(user.address), uintCV(i)],
+              senderAddress: user.address,
+            });
+            
+            const idData = cvToValue(idResult);
+            console.log('SafeFlow ID result at index', i, ':', idData);
+            if (!idData) continue;
+            
+            const sfId = Number(idData.id);
+            
+            const sfResult = await callReadOnlyFunction({
+              network,
+              contractAddress: SAFEFLOW_CONTRACT.address,
+              contractName: SAFEFLOW_CONTRACT.name,
+              functionName: 'get-safeflow',
+              functionArgs: [uintCV(sfId)],
+              senderAddress: user.address,
+            });
+            
+            const sf = cvToValue(sfResult);
+            console.log('SafeFlow data for ID', sfId, ':', sf);
+            if (!sf) continue;
+            
+            safeflows.push({
+              id: sfId,
+              admin: sf.admin,
+              recipient: sf.recipient,
+              title: sf.title,
+              description: sf.description,
+              totalAmount: BigInt(sf['total-amount']),
+              claimedAmount: BigInt(sf['claimed-amount']),
+              dripRate: BigInt(sf['drip-rate']),
+              dripInterval: sf['drip-interval'],
+              startBlock: Number(sf['start-block']),
+              lastClaimBlock: Number(sf['last-claim-block']),
+              status: Number(sf.status),
+              createdAt: Number(sf['created-at']),
+            });
+          } catch (err) {
+            console.error('Failed to fetch SafeFlow at index', i, ':', err);
+          }
+        }
       }
-      
-      setMySafeFlows(safeflows);
     } catch (err) {
-      console.error('Failed to fetch SafeFlows:', err);
+      console.error('Contract call failed:', err);
+      
+      // Method 2: Fallback - query Stacks API for recent transactions
+      console.log('Trying Stacks API fallback...');
+      try {
+        const apiUrl = `https://api.testnet.hiro.so/extended/v1/address/${user.address}/transactions?limit=50`;
+        const response = await fetch(apiUrl);
+        if (response.ok) {
+          const data = await response.json();
+          const createTxs = data.results?.filter((tx: { tx_type: string; contract_call?: { contract_id: string; function_name: string }; tx_status: string }) => 
+            tx.tx_type === 'contract_call' &&
+            tx.contract_call?.contract_id === `${SAFEFLOW_CONTRACT.address}.${SAFEFLOW_CONTRACT.name}` &&
+            tx.contract_call?.function_name === 'create-safeflow' &&
+            tx.tx_status === 'success'
+          ) || [];
+          
+          console.log('Found create-safeflow transactions via API:', createTxs.length);
+          
+          // For each successful create-safeflow tx, try to get the SafeFlow data
+          for (const tx of createTxs) {
+            try {
+              // Get SafeFlow ID from tx result if available
+              const result = tx.tx_result;
+              if (result && result.repr) {
+                // Parse the result - it's a tuple with 'id' field
+                const idMatch = result.repr.match(/id u(\d+)/);
+                if (idMatch) {
+                  const sfId = Number(idMatch[1]);
+                  
+                  const sfResult = await callReadOnlyFunction({
+                    network,
+                    contractAddress: SAFEFLOW_CONTRACT.address,
+                    contractName: SAFEFLOW_CONTRACT.name,
+                    functionName: 'get-safeflow',
+                    functionArgs: [uintCV(sfId)],
+                    senderAddress: user.address,
+                  });
+                  
+                  const sf = cvToValue(sfResult);
+                  if (sf && !safeflows.some(s => s.id === sfId)) {
+                    safeflows.push({
+                      id: sfId,
+                      admin: sf.admin,
+                      recipient: sf.recipient,
+                      title: sf.title,
+                      description: sf.description,
+                      totalAmount: BigInt(sf['total-amount']),
+                      claimedAmount: BigInt(sf['claimed-amount']),
+                      dripRate: BigInt(sf['drip-rate']),
+                      dripInterval: sf['drip-interval'],
+                      startBlock: Number(sf['start-block']),
+                      lastClaimBlock: Number(sf['last-claim-block']),
+                      status: Number(sf.status),
+                      createdAt: Number(sf['created-at']),
+                    });
+                  }
+                }
+              }
+            } catch (txErr) {
+              console.error('Failed to parse tx result:', txErr);
+            }
+          }
+        }
+      } catch (apiErr) {
+        console.error('API fallback failed:', apiErr);
+      }
     }
+    
+    console.log('Total SafeFlows found:', safeflows.length);
+    setMySafeFlows(safeflows);
   }, [user.address]);
 
   // Fetch USDCx balance on Stacks - checks multiple sources including Circle's official contract
@@ -758,15 +842,52 @@ export default function AdminPage() {
         ],
         postConditionMode: PostConditionMode.Deny,
         postConditions,
-        onFinish: (data) => {
-          setSuccess(`SafeFlow created! TX: ${data.txId}`);
+        onFinish: async (data) => {
+          setSuccess(`SafeFlow created! TX: ${data.txId} - Waiting for confirmation...`);
           setRecipientAddress('');
           setTotalAmount('');
           setDripAmount('');
           setTitle('');
           setDescription('');
-          fetchMySafeFlows();
-          fetchUsdcxBalance(); // Refresh USDCx balance after creation
+          
+          // Wait for transaction to be confirmed before refreshing
+          // Transaction takes ~10-30 seconds to confirm on testnet
+          const pollForConfirmation = async (txId: string, attempts = 0): Promise<boolean> => {
+            if (attempts > 30) return false; // Give up after ~60 seconds
+            
+            try {
+              const response = await fetch(`https://api.testnet.hiro.so/extended/v1/tx/${txId}`);
+              if (response.ok) {
+                const txData = await response.json();
+                console.log('TX status:', txData.tx_status);
+                
+                if (txData.tx_status === 'success') {
+                  return true;
+                } else if (txData.tx_status === 'abort_by_response' || txData.tx_status === 'abort_by_post_condition') {
+                  setError(`Transaction failed: ${txData.tx_status}`);
+                  return false;
+                }
+              }
+            } catch (err) {
+              console.log('Polling error:', err);
+            }
+            
+            // Wait 2 seconds and try again
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return pollForConfirmation(txId, attempts + 1);
+          };
+          
+          const confirmed = await pollForConfirmation(data.txId);
+          
+          if (confirmed) {
+            setSuccess(`SafeFlow created and confirmed! TX: ${data.txId}`);
+            fetchMySafeFlows();
+            fetchUsdcxBalance();
+          } else {
+            // Even if we couldn't confirm, try to refresh
+            fetchMySafeFlows();
+            fetchUsdcxBalance();
+          }
         },
         onCancel: () => setError('Transaction cancelled'),
       });
@@ -918,6 +1039,16 @@ export default function AdminPage() {
           {success && (
             <div className="mb-6 p-4 border-2 border-green-500 bg-black text-green-500 font-mono text-xs">
               SUCCESS: {success}
+              {success.includes('TX:') && (
+                <a 
+                  href={`https://explorer.hiro.so/txid/${success.split('TX: ')[1]?.split(' ')[0]}?chain=testnet`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block mt-2 text-orange-500 hover:text-white underline"
+                >
+                  → View on Explorer
+                </a>
+              )}
             </div>
           )}
 
@@ -1203,6 +1334,18 @@ export default function AdminPage() {
 
           {activeTab === 'manage' && (
             <div className="space-y-6">
+              {/* Refresh button */}
+              {user.isConnected && (
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => { fetchMySafeFlows(); setSuccess('Refreshing SafeFlows...'); }}
+                    className="text-xs text-orange-500 hover:text-white uppercase tracking-wider px-3 py-1 border border-orange-500 hover:bg-orange-500 hover:text-black transition-none"
+                  >
+                    ↻ REFRESH
+                  </button>
+                </div>
+              )}
+
               {!user.isConnected ? (
                 <div className="text-center py-12">
                   <p className="text-gray-500 mb-4 uppercase text-sm">Connect your wallet to see your SafeFlows</p>
@@ -1214,6 +1357,9 @@ export default function AdminPage() {
                 <div className="text-center py-12">
                   <h3 className="text-lg text-white mb-2 uppercase tracking-wide">No SafeFlows Yet</h3>
                   <p className="text-gray-500 mb-4 text-sm">Create your first SafeFlow to start streaming payments.</p>
+                  <p className="text-xs text-gray-600 mb-4">
+                    Note: If you just created a SafeFlow, wait ~30 seconds for it to confirm, then click REFRESH above.
+                  </p>
                   <button onClick={() => setActiveTab('create')} className="btn-primary">
                     Create SafeFlow
                   </button>
