@@ -63,6 +63,16 @@ function formatUSDCx(microAmount: bigint): string {
   return `${whole.toLocaleString()}.${fractionStr}`;
 }
 
+// Helper to extract primitive value from cvToValue nested structures
+// cvToValue can return {value: X} or just X, or {type: ..., value: X}
+function extractValue(val: unknown): unknown {
+  if (val === null || val === undefined) return val;
+  if (typeof val === 'object' && 'value' in (val as Record<string, unknown>)) {
+    return extractValue((val as Record<string, unknown>).value);
+  }
+  return val;
+}
+
 function isValidStacksAddress(address: string): boolean {
   if (!address || address.length < 39 || address.length > 41) return false;
   const prefix = address.toUpperCase().substring(0, 2);
@@ -205,29 +215,40 @@ export default function VerifyPage() {
       const progressValue = cvToValue(progressResult);
 
       // Handle both kebab-case and camelCase field names from cvToValue
-      const totalAmount = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
-      const claimedAmount = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
-      const dripRate = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
-      const dripInterval = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
-      const startBlock = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
-      const lastClaimBlock = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
+      // Use extractValue to unwrap nested {value: X} structures
+      const totalAmountRaw = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
+      const claimedAmountRaw = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
+      const dripRateRaw = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
+      const dripIntervalRaw = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
+      const startBlockRaw = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
+      const lastClaimBlockRaw = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
+      
+      const totalAmount = extractValue(totalAmountRaw);
+      const claimedAmount = extractValue(claimedAmountRaw);
+      const dripRate = extractValue(dripRateRaw);
+      const dripInterval = extractValue(dripIntervalRaw);
+      const startBlock = extractValue(startBlockRaw);
+      const lastClaimBlock = extractValue(lastClaimBlockRaw);
+      const status = extractValue(sf.status);
+      const claimable = extractValue(claimableValue);
+      const progress = extractValue(progressValue);
 
       const foundSafeflow: SafeFlowInfo = {
         id: sfId,
-        admin: sf.admin,
-        recipient: sf.recipient,
-        title: sf.title,
-        description: sf.description,
-        totalAmount: BigInt(totalAmount || 0),
-        claimedAmount: BigInt(claimedAmount || 0),
-        dripRate: BigInt(dripRate || 0),
-        dripInterval: dripInterval || 'daily',
+        admin: String(extractValue(sf.admin)),
+        recipient: String(extractValue(sf.recipient)),
+        title: String(extractValue(sf.title) || ''),
+        description: String(extractValue(sf.description) || ''),
+        totalAmount: BigInt((totalAmount as number | bigint) || 0),
+        claimedAmount: BigInt((claimedAmount as number | bigint) || 0),
+        dripRate: BigInt((dripRate as number | bigint) || 0),
+        dripInterval: String(dripInterval || 'daily'),
         startBlock: Number(startBlock || 0),
         lastClaimBlock: Number(lastClaimBlock || 0),
-        status: Number(sf.status || 1),
-        claimable: BigInt(claimableValue?.value || claimableValue || 0),
-        remaining: BigInt(totalAmount || 0) - BigInt(claimedAmount || 0),
-        progress: Number(progressValue?.value || progressValue || 0),
+        status: Number(status || 1),
+        claimable: BigInt((claimable as number | bigint) || 0),
+        remaining: BigInt((totalAmount as number | bigint) || 0) - BigInt((claimedAmount as number | bigint) || 0),
+        progress: Number(progress || 0),
       };
 
       setSafeflows([foundSafeflow]);
@@ -277,7 +298,9 @@ export default function VerifyPage() {
         if (!sf) return;
         
         // Verify this SafeFlow is for our target recipient
-        if (sf.recipient !== targetAddress) return;
+        // Extract recipient value from potential nested structure
+        const recipientVal = String(extractValue(sf.recipient));
+        if (recipientVal !== targetAddress) return;
 
         const claimableResult = await callReadOnlyFunction({
           network,
@@ -302,14 +325,25 @@ export default function VerifyPage() {
         const progressValue = cvToValue(progressResult);
 
         // Handle both kebab-case and camelCase field names from cvToValue
-        const totalAmount = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
-        const claimedAmount = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
-        const dripRate = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
-        const dripInterval = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
-        const startBlock = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
-        const lastClaimBlock = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
+        // Use extractValue to unwrap nested {value: X} structures
+        const totalAmountRaw = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
+        const claimedAmountRaw = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
+        const dripRateRaw = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
+        const dripIntervalRaw = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
+        const startBlockRaw = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
+        const lastClaimBlockRaw = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
         
-        if (totalAmount === undefined) {
+        const totalAmount = extractValue(totalAmountRaw);
+        const claimedAmount = extractValue(claimedAmountRaw);
+        const dripRate = extractValue(dripRateRaw);
+        const dripInterval = extractValue(dripIntervalRaw);
+        const startBlock = extractValue(startBlockRaw);
+        const lastClaimBlock = extractValue(lastClaimBlockRaw);
+        const status = extractValue(sf.status);
+        const claimable = extractValue(claimableValue);
+        const progress = extractValue(progressValue);
+        
+        if (totalAmount === undefined || totalAmount === null) {
           console.error('Could not find totalAmount field in SafeFlow data');
           return;
         }
@@ -317,20 +351,20 @@ export default function VerifyPage() {
         foundIds.add(sfId);
         foundSafeflows.push({
           id: sfId,
-          admin: sf.admin,
-          recipient: sf.recipient,
-          title: sf.title,
-          description: sf.description,
-          totalAmount: BigInt(totalAmount),
-          claimedAmount: BigInt(claimedAmount || 0),
-          dripRate: BigInt(dripRate || 0),
-          dripInterval: dripInterval || 'daily',
+          admin: String(extractValue(sf.admin)),
+          recipient: recipientVal,
+          title: String(extractValue(sf.title) || ''),
+          description: String(extractValue(sf.description) || ''),
+          totalAmount: BigInt(totalAmount as number | bigint),
+          claimedAmount: BigInt((claimedAmount as number | bigint) || 0),
+          dripRate: BigInt((dripRate as number | bigint) || 0),
+          dripInterval: String(dripInterval || 'daily'),
           startBlock: Number(startBlock || 0),
           lastClaimBlock: Number(lastClaimBlock || 0),
-          status: Number(sf.status || 1),
-          claimable: BigInt(claimableValue?.value || claimableValue || 0),
-          remaining: BigInt(totalAmount) - BigInt(claimedAmount || 0),
-          progress: Number(progressValue?.value || progressValue || 0),
+          status: Number(status || 1),
+          claimable: BigInt((claimable as number | bigint) || 0),
+          remaining: BigInt(totalAmount as number | bigint) - BigInt((claimedAmount as number | bigint) || 0),
+          progress: Number(progress || 0),
         });
       } catch (err) {
         console.error('Error fetching SafeFlow', sfId, ':', err);
@@ -408,7 +442,7 @@ export default function VerifyPage() {
               console.log('Recipient SafeFlow ID at index', i, ':', idData);
               if (idData === null || idData === undefined) continue;
 
-              // Parse the ID - cvToValue can return different structures
+              // Parse the ID - cvToValue returns {type: ..., value: {id: ...}} structure
               let sfId: number = NaN;
               console.log('Raw idData type:', typeof idData, 'value:', JSON.stringify(idData));
               
@@ -417,8 +451,20 @@ export default function VerifyPage() {
               } else if (typeof idData === 'bigint') {
                 sfId = Number(idData);
               } else if (typeof idData === 'object' && idData !== null) {
-                // Try various structures
-                if ('id' in idData) {
+                // Structure is: {type: '(tuple (id uint))', value: {id: 0n or {value: 0n}}}
+                if ('value' in idData && typeof idData.value === 'object' && idData.value !== null) {
+                  const innerValue = idData.value;
+                  if ('id' in innerValue) {
+                    const idVal = innerValue.id;
+                    if (typeof idVal === 'number') {
+                      sfId = idVal;
+                    } else if (typeof idVal === 'bigint') {
+                      sfId = Number(idVal);
+                    } else if (typeof idVal === 'object' && idVal !== null && 'value' in idVal) {
+                      sfId = Number(idVal.value);
+                    }
+                  }
+                } else if ('id' in idData) {
                   const idVal = idData.id;
                   if (typeof idVal === 'number') {
                     sfId = idVal;
@@ -426,13 +472,6 @@ export default function VerifyPage() {
                     sfId = Number(idVal);
                   } else if (typeof idVal === 'object' && idVal !== null) {
                     sfId = Number(idVal.value ?? idVal);
-                  }
-                } else if ('value' in idData) {
-                  const val = idData.value;
-                  if (typeof val === 'object' && val !== null && 'id' in val) {
-                    sfId = Number(val.id);
-                  } else {
-                    sfId = Number(val);
                   }
                 }
               }

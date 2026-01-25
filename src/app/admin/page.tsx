@@ -159,6 +159,16 @@ function formatUSDCx(microAmount: bigint): string {
   return `${whole.toLocaleString()}.${fractionStr}`;
 }
 
+// Helper to extract primitive value from cvToValue nested structures
+// cvToValue can return {value: X} or just X, or {type: ..., value: X}
+function extractValue(val: unknown): unknown {
+  if (val === null || val === undefined) return val;
+  if (typeof val === 'object' && 'value' in (val as Record<string, unknown>)) {
+    return extractValue((val as Record<string, unknown>).value);
+  }
+  return val;
+}
+
 function parseUSDCx(amount: string): bigint {
   const [whole, fraction = ''] = amount.split('.');
   const paddedFraction = fraction.padEnd(USDC_DECIMALS, '0').slice(0, USDC_DECIMALS);
@@ -343,30 +353,46 @@ export default function AdminPage() {
                   
                   if (sf) {
                     // Handle both kebab-case and camelCase field names from cvToValue
-                    const totalAmount = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
-                    const claimedAmount = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
-                    const dripRate = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
-                    const dripInterval = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
-                    const startBlock = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
-                    const lastClaimBlock = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
-                    const createdAt = sf['created-at'] ?? sf.createdAt ?? sf.created_at;
+                    // Use extractValue to unwrap nested {value: X} structures
+                    const totalAmountRaw = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
+                    const claimedAmountRaw = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
+                    const dripRateRaw = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
+                    const dripIntervalRaw = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
+                    const startBlockRaw = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
+                    const lastClaimBlockRaw = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
+                    const createdAtRaw = sf['created-at'] ?? sf.createdAt ?? sf.created_at;
+                    const statusRaw = sf.status;
                     
-                    console.log('Parsed values:', { totalAmount, claimedAmount, dripRate, dripInterval, startBlock });
+                    // Extract actual values from potential nested structures
+                    const totalAmount = extractValue(totalAmountRaw);
+                    const claimedAmount = extractValue(claimedAmountRaw);
+                    const dripRate = extractValue(dripRateRaw);
+                    const dripInterval = extractValue(dripIntervalRaw);
+                    const startBlock = extractValue(startBlockRaw);
+                    const lastClaimBlock = extractValue(lastClaimBlockRaw);
+                    const createdAt = extractValue(createdAtRaw);
+                    const status = extractValue(statusRaw);
+                    const admin = extractValue(sf.admin);
+                    const recipient = extractValue(sf.recipient);
+                    const title = extractValue(sf.title);
+                    const description = extractValue(sf.description);
                     
-                    if (totalAmount !== undefined) {
+                    console.log('Extracted values:', { totalAmount, claimedAmount, dripRate, dripInterval, startBlock, status });
+                    
+                    if (totalAmount !== undefined && totalAmount !== null) {
                       addSafeFlow({
                         id: sfId,
-                        admin: sf.admin,
-                        recipient: sf.recipient,
-                        title: sf.title,
-                        description: sf.description,
-                        totalAmount: BigInt(totalAmount),
-                        claimedAmount: BigInt(claimedAmount || 0),
-                        dripRate: BigInt(dripRate || 0),
-                        dripInterval: dripInterval || 'daily',
+                        admin: String(admin),
+                        recipient: String(recipient),
+                        title: String(title || ''),
+                        description: String(description || ''),
+                        totalAmount: BigInt(totalAmount as number | bigint),
+                        claimedAmount: BigInt((claimedAmount as number | bigint) || 0),
+                        dripRate: BigInt((dripRate as number | bigint) || 0),
+                        dripInterval: String(dripInterval || 'daily'),
                         startBlock: Number(startBlock || 0),
                         lastClaimBlock: Number(lastClaimBlock || 0),
-                        status: Number(sf.status || 1),
+                        status: Number(status || 1),
                         createdAt: Number(createdAt || 0),
                       });
                       console.log('Added SafeFlow:', sfId);
@@ -421,9 +447,7 @@ export default function AdminPage() {
             console.log('SafeFlow ID result at index', i, ':', idData);
             if (idData === null || idData === undefined) continue;
             
-            // Handle different possible formats: {id: 0}, {id: {value: 0}}, or direct value
-            // Parse the ID - cvToValue can return different structures
-            // Could be: {id: 0}, {id: {value: 0}}, {value: {id: 0}}, or nested value objects
+            // Parse the ID - cvToValue returns {type: ..., value: {id: ...}} structure
             let sfId: number = NaN;
             console.log('Raw idData type:', typeof idData, 'value:', JSON.stringify(idData));
             
@@ -432,22 +456,27 @@ export default function AdminPage() {
             } else if (typeof idData === 'bigint') {
               sfId = Number(idData);
             } else if (typeof idData === 'object' && idData !== null) {
-              // Try various structures
-              if ('id' in idData) {
+              // Structure is: {type: '(tuple (id uint))', value: {id: 0n or {value: 0n}}}
+              if ('value' in idData && typeof idData.value === 'object' && idData.value !== null) {
+                const innerValue = idData.value as Record<string, unknown>;
+                if ('id' in innerValue) {
+                  const idVal = innerValue.id;
+                  if (typeof idVal === 'number') {
+                    sfId = idVal;
+                  } else if (typeof idVal === 'bigint') {
+                    sfId = Number(idVal);
+                  } else if (typeof idVal === 'object' && idVal !== null && 'value' in (idVal as Record<string, unknown>)) {
+                    sfId = Number((idVal as Record<string, unknown>).value);
+                  }
+                }
+              } else if ('id' in idData) {
                 const idVal = idData.id;
                 if (typeof idVal === 'number') {
                   sfId = idVal;
                 } else if (typeof idVal === 'bigint') {
                   sfId = Number(idVal);
                 } else if (typeof idVal === 'object' && idVal !== null) {
-                  sfId = Number(idVal.value ?? idVal);
-                }
-              } else if ('value' in idData) {
-                const val = idData.value;
-                if (typeof val === 'object' && val !== null && 'id' in val) {
-                  sfId = Number(val.id);
-                } else {
-                  sfId = Number(val);
+                  sfId = Number((idVal as Record<string, unknown>).value ?? idVal);
                 }
               }
             }
@@ -478,28 +507,38 @@ export default function AdminPage() {
             if (!sf) continue;
             
             // Handle both kebab-case and camelCase field names from cvToValue
-            const totalAmount = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
-            const claimedAmount = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
-            const dripRate = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
-            const dripInterval = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
-            const startBlock = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
-            const lastClaimBlock = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
-            const createdAt = sf['created-at'] ?? sf.createdAt ?? sf.created_at;
+            // Use extractValue to unwrap nested {value: X} structures
+            const totalAmountRaw = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
+            const claimedAmountRaw = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
+            const dripRateRaw = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
+            const dripIntervalRaw = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
+            const startBlockRaw = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
+            const lastClaimBlockRaw = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
+            const createdAtRaw = sf['created-at'] ?? sf.createdAt ?? sf.created_at;
             
-            if (totalAmount !== undefined) {
+            const totalAmount = extractValue(totalAmountRaw);
+            const claimedAmount = extractValue(claimedAmountRaw);
+            const dripRate = extractValue(dripRateRaw);
+            const dripInterval = extractValue(dripIntervalRaw);
+            const startBlock = extractValue(startBlockRaw);
+            const lastClaimBlock = extractValue(lastClaimBlockRaw);
+            const createdAt = extractValue(createdAtRaw);
+            const status = extractValue(sf.status);
+            
+            if (totalAmount !== undefined && totalAmount !== null) {
               addSafeFlow({
                 id: sfId,
-                admin: sf.admin,
-                recipient: sf.recipient,
-                title: sf.title,
-                description: sf.description,
-                totalAmount: BigInt(totalAmount),
-                claimedAmount: BigInt(claimedAmount || 0),
-                dripRate: BigInt(dripRate || 0),
-                dripInterval: dripInterval || 'daily',
+                admin: String(extractValue(sf.admin)),
+                recipient: String(extractValue(sf.recipient)),
+                title: String(extractValue(sf.title) || ''),
+                description: String(extractValue(sf.description) || ''),
+                totalAmount: BigInt(totalAmount as number | bigint),
+                claimedAmount: BigInt((claimedAmount as number | bigint) || 0),
+                dripRate: BigInt((dripRate as number | bigint) || 0),
+                dripInterval: String(dripInterval || 'daily'),
                 startBlock: Number(startBlock || 0),
                 lastClaimBlock: Number(lastClaimBlock || 0),
-                status: Number(sf.status || 1),
+                status: Number(status || 1),
                 createdAt: Number(createdAt || 0),
               });
             }
