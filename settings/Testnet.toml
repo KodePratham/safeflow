@@ -4,5 +4,5 @@ stacks_node_rpc_address = "https://api.testnet.hiro.so"
 deployment_fee_rate = 10
 
 [accounts.deployer]
-mnemonic = "<YOUR_MNEMONIC_HERE>"
+mnemonic = "satisfy sample mask cabin gauge struggle impulse first sport visit method wage either dumb ring grass depend improve letter adjust health eye add rug"
 derivation = "m/44'/5757'/0'/0/0"

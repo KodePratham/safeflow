@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-1. Install Clarinet
+1. Install Clarinet (see [docs/CLARINET_SETUP.md](docs/CLARINET_SETUP.md))
    ```powershell
    winget install HiroSystems.Clarinet
    ```
@@ -22,7 +22,7 @@ Create `.env.local`:
 
 ```env
 STACKS_DEPLOYER_MNEMONIC="your 24 word mnemonic"
-NEXT_PUBLIC_DEVPAYMENTS_ADDRESS=ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+NEXT_PUBLIC_SAFEFLOW_ADDRESS=ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
 NEXT_PUBLIC_USDCX_ADDRESS=ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
 ```
 
@@ -60,7 +60,7 @@ In console:
 ```clarity
 (contract-call? .usdcx mint u1000000000 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM)
 (contract-call? .usdcx get-balance 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM)
-(contract-call? .dev-payments get-stats)
+(contract-call? .safeflow get-stats)
 ```
 
 ---
@@ -89,13 +89,13 @@ https://explorer.stacks.co/?chain=testnet
 After deployment, update `.env.local` with your deployer address:
 
 ```env
-NEXT_PUBLIC_DEVPAYMENTS_ADDRESS=ST<your_address>
+NEXT_PUBLIC_SAFEFLOW_ADDRESS=ST<your_address>
 NEXT_PUBLIC_USDCX_ADDRESS=ST<your_address>
 ```
 
 Contract addresses are: `<deployer_address>.<contract_name>`
 
-Example: `ST1ABC123XYZ.dev-payments`
+Example: `ST1ABC123XYZ.safeflow`
 
 ---
 
@@ -132,24 +132,36 @@ Access:
 
 ---
 
-## Step 7: Create Payment
+## Step 7: Create SafeFlow
 
-1. Go to Admin > Create Payment tab
-2. Enter recipient Stacks address
-3. Enter total amount
-4. Enter drip amount per period
-5. Select daily or monthly
-6. Add description
-7. Confirm transaction
+1. Go to Admin > Create SafeFlow tab
+2. Enter a title for the SafeFlow
+3. Enter description (optional)
+4. Enter recipient's Stacks address
+5. Enter total USDCx amount
+6. Enter drip amount per period
+7. Select daily or monthly interval
+8. Confirm transaction
 
 ---
 
-## Step 8: Claim Payment
+## Step 8: Manage SafeFlows
+
+1. Go to Admin > Manage tab
+2. View all your created SafeFlows
+3. Click on a SafeFlow to expand options
+4. **Freeze**: Temporarily stop dripping (recipient can't claim)
+5. **Resume**: Unfreeze and resume dripping
+6. **Cancel**: Stop completely and return remaining USDCx to your wallet
+
+---
+
+## Step 9: Claim Payment (Recipient)
 
 1. Go to Verify page
 2. Enter recipient address or connect wallet
-3. View payment details
-4. Click Claim (if connected as recipient)
+3. View all SafeFlows where you're the recipient
+4. Click Claim to receive available USDCx
 5. Confirm transaction
 
 ---

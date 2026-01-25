@@ -2,7 +2,7 @@
 ;; SIP-010 Compliant Fungible Token representing bridged USDC on Stacks
 ;; This is deployed by Circle's xReserve protocol
 
-(impl-trait 'ST1NXBK3K5YYMD6FD41MVNP3JS1GABZ8TRVX023PT.sip-010-trait-ft-standard.sip-010-trait)
+(impl-trait .sip-010-trait.sip-010-trait)
 
 ;; Token definitions
 (define-fungible-token usdcx)

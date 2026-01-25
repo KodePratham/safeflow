@@ -8,6 +8,7 @@ import {
   openContractCall,
 } from '@stacks/connect';
 import {
+  uintCV,
   principalCV,
   contractPrincipalCV,
   PostConditionMode,
@@ -17,9 +18,9 @@ import {
 import { StacksTestnet } from '@stacks/network';
 import Link from 'next/link';
 
-const DEVPAYMENTS_CONTRACT = {
-  address: process.env.NEXT_PUBLIC_DEVPAYMENTS_ADDRESS || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM',
-  name: 'dev-payments',
+const SAFEFLOW_CONTRACT = {
+  address: process.env.NEXT_PUBLIC_SAFEFLOW_ADDRESS || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM',
+  name: 'safeflow',
 };
 
 const USDCX_CONTRACT = {
@@ -35,15 +36,19 @@ const USDC_DECIMALS = 6;
 const BLOCKS_PER_DAY = 144;
 const BLOCKS_PER_MONTH = 4320;
 
-interface PaymentInfo {
+interface SafeFlowInfo {
+  id: number;
+  admin: string;
+  recipient: string;
+  title: string;
+  description: string;
   totalAmount: bigint;
   claimedAmount: bigint;
   dripRate: bigint;
   dripInterval: string;
   startBlock: number;
   lastClaimBlock: number;
-  isActive: boolean;
-  description: string;
+  status: number;
   claimable: bigint;
   remaining: bigint;
   progress: number;
@@ -64,6 +69,24 @@ function isValidStacksAddress(address: string): boolean {
   return prefix === 'ST' || prefix === 'SP';
 }
 
+function getStatusText(status: number): string {
+  switch (status) {
+    case 1: return 'Active';
+    case 2: return 'Frozen';
+    case 3: return 'Cancelled';
+    default: return 'Unknown';
+  }
+}
+
+function getStatusColor(status: number): string {
+  switch (status) {
+    case 1: return 'bg-green-50 text-green-700 border-green-200';
+    case 2: return 'bg-blue-50 text-blue-700 border-blue-200';
+    case 3: return 'bg-red-50 text-red-700 border-red-200';
+    default: return 'bg-gray-100 text-gray-600 border-gray-200';
+  }
+}
+
 export default function VerifyPage() {
   const [user, setUser] = useState<{ address: string | null; isConnected: boolean }>({
     address: null,
@@ -71,8 +94,9 @@ export default function VerifyPage() {
   });
 
   const [searchAddress, setSearchAddress] = useState('');
-  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
+  const [safeflows, setSafeflows] = useState<SafeFlowInfo[]>([]);
   const [searchedAddress, setSearchedAddress] = useState('');
+  const [selectedSafeFlow, setSelectedSafeFlow] = useState<SafeFlowInfo | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -122,7 +146,7 @@ export default function VerifyPage() {
     setUser({ address: null, isConnected: false });
   }, []);
 
-  const searchPayment = async (address?: string) => {
+  const searchSafeFlows = async (address?: string) => {
     const targetAddress = address || searchAddress;
     
     if (!isValidStacksAddress(targetAddress)) {
@@ -132,94 +156,124 @@ export default function VerifyPage() {
 
     setIsSearching(true);
     setError(null);
-    setPaymentInfo(null);
+    setSafeflows([]);
+    setSelectedSafeFlow(null);
 
     try {
-      const paymentResult = await callReadOnlyFunction({
+      // Get count of SafeFlows for this recipient
+      const countResult = await callReadOnlyFunction({
         network,
-        contractAddress: DEVPAYMENTS_CONTRACT.address,
-        contractName: DEVPAYMENTS_CONTRACT.name,
-        functionName: 'get-payment',
+        contractAddress: SAFEFLOW_CONTRACT.address,
+        contractName: SAFEFLOW_CONTRACT.name,
+        functionName: 'get-recipient-safeflow-count',
         functionArgs: [principalCV(targetAddress)],
         senderAddress: targetAddress,
       });
 
-      const paymentValue = cvToValue(paymentResult);
+      const count = Number(cvToValue(countResult));
 
-      if (!paymentValue) {
-        setError('No payment found for this address.');
+      if (count === 0) {
+        // This is not an error - just no SafeFlows yet
         setSearchedAddress(targetAddress);
+        setIsSearching(false);
         return;
       }
 
-      const claimableResult = await callReadOnlyFunction({
-        network,
-        contractAddress: DEVPAYMENTS_CONTRACT.address,
-        contractName: DEVPAYMENTS_CONTRACT.name,
-        functionName: 'get-claimable-amount',
-        functionArgs: [principalCV(targetAddress)],
-        senderAddress: targetAddress,
-      });
+      const foundSafeflows: SafeFlowInfo[] = [];
 
-      const claimableValue = cvToValue(claimableResult);
+      for (let i = 0; i < count; i++) {
+        const idResult = await callReadOnlyFunction({
+          network,
+          contractAddress: SAFEFLOW_CONTRACT.address,
+          contractName: SAFEFLOW_CONTRACT.name,
+          functionName: 'get-recipient-safeflow-id',
+          functionArgs: [principalCV(targetAddress), uintCV(i)],
+          senderAddress: targetAddress,
+        });
 
-      const progressResult = await callReadOnlyFunction({
-        network,
-        contractAddress: DEVPAYMENTS_CONTRACT.address,
-        contractName: DEVPAYMENTS_CONTRACT.name,
-        functionName: 'get-payment-progress',
-        functionArgs: [principalCV(targetAddress)],
-        senderAddress: targetAddress,
-      });
+        const idData = cvToValue(idResult);
+        if (!idData) continue;
 
-      const progressValue = cvToValue(progressResult);
+        const sfId = Number(idData.id);
 
-      const remainingResult = await callReadOnlyFunction({
-        network,
-        contractAddress: DEVPAYMENTS_CONTRACT.address,
-        contractName: DEVPAYMENTS_CONTRACT.name,
-        functionName: 'get-remaining-amount',
-        functionArgs: [principalCV(targetAddress)],
-        senderAddress: targetAddress,
-      });
+        const sfResult = await callReadOnlyFunction({
+          network,
+          contractAddress: SAFEFLOW_CONTRACT.address,
+          contractName: SAFEFLOW_CONTRACT.name,
+          functionName: 'get-safeflow',
+          functionArgs: [uintCV(sfId)],
+          senderAddress: targetAddress,
+        });
 
-      const remainingValue = cvToValue(remainingResult);
+        const sf = cvToValue(sfResult);
+        if (!sf) continue;
 
-      setPaymentInfo({
-        totalAmount: BigInt(paymentValue['total-amount']),
-        claimedAmount: BigInt(paymentValue['claimed-amount']),
-        dripRate: BigInt(paymentValue['drip-rate']),
-        dripInterval: paymentValue['drip-interval'],
-        startBlock: Number(paymentValue['start-block']),
-        lastClaimBlock: Number(paymentValue['last-claim-block']),
-        isActive: paymentValue['is-active'],
-        description: paymentValue['description'],
-        claimable: BigInt(claimableValue.value || claimableValue || 0),
-        remaining: BigInt(remainingValue.value || remainingValue || 0),
-        progress: Number(progressValue.value || progressValue || 0),
-      });
+        const claimableResult = await callReadOnlyFunction({
+          network,
+          contractAddress: SAFEFLOW_CONTRACT.address,
+          contractName: SAFEFLOW_CONTRACT.name,
+          functionName: 'get-claimable-amount',
+          functionArgs: [uintCV(sfId)],
+          senderAddress: targetAddress,
+        });
 
+        const claimableValue = cvToValue(claimableResult);
+
+        const progressResult = await callReadOnlyFunction({
+          network,
+          contractAddress: SAFEFLOW_CONTRACT.address,
+          contractName: SAFEFLOW_CONTRACT.name,
+          functionName: 'get-safeflow-progress',
+          functionArgs: [uintCV(sfId)],
+          senderAddress: targetAddress,
+        });
+
+        const progressValue = cvToValue(progressResult);
+
+        foundSafeflows.push({
+          id: sfId,
+          admin: sf.admin,
+          recipient: sf.recipient,
+          title: sf.title,
+          description: sf.description,
+          totalAmount: BigInt(sf['total-amount']),
+          claimedAmount: BigInt(sf['claimed-amount']),
+          dripRate: BigInt(sf['drip-rate']),
+          dripInterval: sf['drip-interval'],
+          startBlock: Number(sf['start-block']),
+          lastClaimBlock: Number(sf['last-claim-block']),
+          status: Number(sf.status),
+          claimable: BigInt(claimableValue.value || claimableValue || 0),
+          remaining: BigInt(sf['total-amount']) - BigInt(sf['claimed-amount']),
+          progress: Number(progressValue.value || progressValue || 0),
+        });
+      }
+
+      setSafeflows(foundSafeflows);
       setSearchedAddress(targetAddress);
     } catch (err) {
       console.error('Search error:', err);
-      setError('Failed to fetch payment information.');
+      setError('Failed to fetch SafeFlow information.');
     } finally {
       setIsSearching(false);
     }
   };
 
-  const claimPayment = async () => {
+  const claimFromSafeFlow = async (id: number) => {
     if (!user.isConnected || !user.address) {
       setError('Please connect your wallet to claim');
       return;
     }
 
-    if (user.address !== searchedAddress) {
-      setError('You can only claim payments for your connected wallet');
+    const sf = safeflows.find(s => s.id === id);
+    if (!sf) return;
+
+    if (user.address !== sf.recipient) {
+      setError('You can only claim SafeFlows where you are the recipient');
       return;
     }
 
-    if (!paymentInfo || paymentInfo.claimable <= 0n) {
+    if (sf.claimable <= 0n) {
       setError('No funds available to claim');
       return;
     }
@@ -231,14 +285,17 @@ export default function VerifyPage() {
     try {
       await openContractCall({
         network,
-        contractAddress: DEVPAYMENTS_CONTRACT.address,
-        contractName: DEVPAYMENTS_CONTRACT.name,
+        contractAddress: SAFEFLOW_CONTRACT.address,
+        contractName: SAFEFLOW_CONTRACT.name,
         functionName: 'claim',
-        functionArgs: [contractPrincipalCV(USDCX_CONTRACT.address, USDCX_CONTRACT.name)],
+        functionArgs: [
+          contractPrincipalCV(USDCX_CONTRACT.address, USDCX_CONTRACT.name),
+          uintCV(id),
+        ],
         postConditionMode: PostConditionMode.Allow,
         onFinish: (data) => {
-          setSuccess(`Claim successful. TX: ${data.txId}`);
-          searchPayment(user.address!);
+          setSuccess(`Claim successful! TX: ${data.txId}`);
+          searchSafeFlows(user.address!);
         },
         onCancel: () => setError('Transaction cancelled'),
       });
@@ -251,7 +308,7 @@ export default function VerifyPage() {
 
   useEffect(() => {
     if (user.isConnected && user.address && searchAddress === user.address) {
-      searchPayment(user.address);
+      searchSafeFlows(user.address);
     }
   }, [user.address]);
 
@@ -274,7 +331,7 @@ export default function VerifyPage() {
                 <span className="text-sm text-gray-600 border border-gray-200 px-3 py-1 rounded">
                   {user.address?.slice(0, 6)}...{user.address?.slice(-4)}
                 </span>
-                <button onClick={disconnectWallet} className="text-gray-400 hover:text-gray-600">x</button>
+                <button onClick={disconnectWallet} className="text-gray-400 hover:text-gray-600">×</button>
               </div>
             ) : (
               <button onClick={connectWallet} className="btn-primary text-sm py-2">
@@ -287,8 +344,8 @@ export default function VerifyPage() {
 
       <main className="flex-1 py-12 px-6">
         <div className="max-w-xl mx-auto">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Verify Payment</h2>
-          <p className="text-gray-600 mb-8">Enter an address to check payment status and claim funds.</p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">View & Claim SafeFlows</h2>
+          <p className="text-gray-600 mb-8">Enter an address to view payment streams and claim available funds.</p>
 
           {error && (
             <div className="mb-6 p-4 border border-red-200 bg-red-50 rounded-lg text-red-700">
@@ -311,7 +368,7 @@ export default function VerifyPage() {
                 className="input flex-1 font-mono text-sm"
               />
               <button
-                onClick={() => searchPayment()}
+                onClick={() => searchSafeFlows()}
                 disabled={isSearching}
                 className="btn-primary px-6"
               >
@@ -321,7 +378,7 @@ export default function VerifyPage() {
 
             {user.isConnected && user.address !== searchAddress && (
               <button
-                onClick={() => { setSearchAddress(user.address!); searchPayment(user.address!); }}
+                onClick={() => { setSearchAddress(user.address!); searchSafeFlows(user.address!); }}
                 className="mt-3 text-sm text-orange-500 hover:text-orange-600"
               >
                 Use connected wallet
@@ -329,120 +386,142 @@ export default function VerifyPage() {
             )}
           </div>
 
-          {paymentInfo && (
-            <div className="card">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Payment Details</h3>
-                  <p className="text-gray-500 text-sm font-mono">
-                    {searchedAddress.slice(0, 10)}...{searchedAddress.slice(-8)}
-                  </p>
-                </div>
-                <span className={`px-3 py-1 rounded text-sm ${
-                  paymentInfo.isActive 
-                    ? 'bg-green-50 text-green-700 border border-green-200'
-                    : 'bg-gray-100 text-gray-600 border border-gray-200'
-                }`}>
-                  {paymentInfo.isActive ? 'Active' : 'Paused'}
-                </span>
-              </div>
-
-              {paymentInfo.description && (
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500">Description</p>
-                  <p className="text-gray-900">{paymentInfo.description}</p>
-                </div>
-              )}
-
-              <div className="mb-6">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-500">Progress</span>
-                  <span className="text-gray-900">{paymentInfo.progress}%</span>
-                </div>
-                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-orange-500 transition-all duration-500"
-                    style={{ width: `${paymentInfo.progress}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-gray-500 text-xs mb-1">Total</p>
-                  <p className="text-gray-900 font-bold">${formatUSDCx(paymentInfo.totalAmount)}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-gray-500 text-xs mb-1">Claimed</p>
-                  <p className="text-green-600 font-bold">${formatUSDCx(paymentInfo.claimedAmount)}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-gray-500 text-xs mb-1">Remaining</p>
-                  <p className="text-gray-900 font-bold">${formatUSDCx(paymentInfo.remaining)}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-gray-500 text-xs mb-1">Rate</p>
-                  <p className="text-gray-900 font-bold">
-                    ${formatUSDCx(paymentInfo.dripRate * BigInt(paymentInfo.dripInterval === 'daily' ? BLOCKS_PER_DAY : BLOCKS_PER_MONTH))}/{paymentInfo.dripInterval === 'daily' ? 'day' : 'mo'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 pt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-gray-500 text-sm">Available to Claim</p>
-                    <p className="text-2xl font-bold text-orange-500">${formatUSDCx(paymentInfo.claimable)}</p>
+          {safeflows.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-gray-900">
+                {safeflows.length} SafeFlow{safeflows.length > 1 ? 's' : ''} Found
+              </h3>
+              
+              {safeflows.map((sf) => (
+                <div
+                  key={sf.id}
+                  className={`card cursor-pointer transition-colors ${
+                    selectedSafeFlow?.id === sf.id ? 'ring-2 ring-orange-500' : ''
+                  }`}
+                  onClick={() => setSelectedSafeFlow(selectedSafeFlow?.id === sf.id ? null : sf)}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-bold text-gray-900">{sf.title}</h4>
+                    <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(sf.status)}`}>
+                      {getStatusText(sf.status)}
+                    </span>
                   </div>
-                </div>
 
-                {paymentInfo.claimable > 0n ? (
-                  <>
-                    {user.isConnected && user.address === searchedAddress ? (
-                      <button
-                        onClick={claimPayment}
-                        disabled={isLoading}
-                        className="btn-primary w-full"
-                      >
-                        {isLoading ? 'Processing...' : 'Claim'}
-                      </button>
-                    ) : (
-                      <div className="text-center">
-                        <p className="text-gray-500 mb-3 text-sm">Connect wallet to claim</p>
-                        <button onClick={connectWallet} className="btn-primary">
-                          Connect Wallet
-                        </button>
+                  {sf.description && (
+                    <p className="text-sm text-gray-600 mb-3">{sf.description}</p>
+                  )}
+
+                  <div className="mb-4">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-500">Progress</span>
+                      <span className="text-gray-900">{sf.progress}%</span>
+                    </div>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-orange-500 transition-all duration-500"
+                        style={{ width: `${sf.progress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-gray-500 text-xs mb-1">Total</p>
+                      <p className="text-gray-900 font-bold">${formatUSDCx(sf.totalAmount)}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-gray-500 text-xs mb-1">Claimed</p>
+                      <p className="text-green-600 font-bold">${formatUSDCx(sf.claimedAmount)}</p>
+                    </div>
+                  </div>
+
+                  {selectedSafeFlow?.id === sf.id && (
+                    <div className="pt-4 border-t border-gray-100">
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-gray-500 text-xs mb-1">Remaining</p>
+                          <p className="text-gray-900 font-bold">${formatUSDCx(sf.remaining)}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-gray-500 text-xs mb-1">Rate</p>
+                          <p className="text-gray-900 font-bold">
+                            ${formatUSDCx(sf.dripRate * BigInt(sf.dripInterval === 'daily' ? BLOCKS_PER_DAY : BLOCKS_PER_MONTH))}/{sf.dripInterval === 'daily' ? 'day' : 'mo'}
+                          </p>
+                        </div>
                       </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-center text-gray-500 py-2">
-                    No funds available yet. Check back later.
-                  </p>
-                )}
-              </div>
 
-              <div className="mt-6 pt-4 border-t border-gray-100 grid grid-cols-3 gap-4 text-xs">
-                <div>
-                  <p className="text-gray-400">Start</p>
-                  <p className="text-gray-600 font-mono">{paymentInfo.startBlock.toLocaleString()}</p>
+                      <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
+                        <p className="text-gray-400 text-xs mb-1">From</p>
+                        <p className="font-mono text-gray-600 break-all">{sf.admin}</p>
+                      </div>
+
+                      <div className="border-t border-gray-100 pt-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <p className="text-gray-500 text-sm">Available to Claim</p>
+                            <p className="text-2xl font-bold text-orange-500">${formatUSDCx(sf.claimable)}</p>
+                          </div>
+                        </div>
+
+                        {sf.status === 1 && sf.claimable > 0n ? (
+                          <>
+                            {user.isConnected && user.address === sf.recipient ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); claimFromSafeFlow(sf.id); }}
+                                disabled={isLoading}
+                                className="btn-primary w-full"
+                              >
+                                {isLoading ? 'Processing...' : 'Claim USDCx'}
+                              </button>
+                            ) : (
+                              <div className="text-center">
+                                <p className="text-gray-500 mb-3 text-sm">Connect wallet to claim</p>
+                                <button onClick={connectWallet} className="btn-primary">
+                                  Connect Wallet
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        ) : sf.status === 2 ? (
+                          <p className="text-center text-blue-600 py-2">
+                            This SafeFlow is frozen. Contact the admin to resume.
+                          </p>
+                        ) : sf.status === 3 ? (
+                          <p className="text-center text-red-600 py-2">
+                            This SafeFlow has been cancelled.
+                          </p>
+                        ) : (
+                          <p className="text-center text-gray-500 py-2">
+                            No funds available yet. Check back later.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-4 text-xs">
+                        <div>
+                          <p className="text-gray-400">Start Block</p>
+                          <p className="text-gray-600 font-mono">{sf.startBlock.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400">Last Claim</p>
+                          <p className="text-gray-600 font-mono">{sf.lastClaimBlock.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400">Current</p>
+                          <p className="text-orange-500 font-mono">{currentBlock.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <p className="text-gray-400">Last Claim</p>
-                  <p className="text-gray-600 font-mono">{paymentInfo.lastClaimBlock.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-gray-400">Current</p>
-                  <p className="text-orange-500 font-mono">{currentBlock.toLocaleString()}</p>
-                </div>
-              </div>
+              ))}
             </div>
           )}
 
-          {searchedAddress && !paymentInfo && !isSearching && !error && (
+          {searchedAddress && safeflows.length === 0 && !isSearching && !error && (
             <div className="card text-center py-12">
-              <h3 className="text-lg font-bold text-gray-900 mb-2">No Payment Found</h3>
-              <p className="text-gray-500">No active payment stream for this address.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">No SafeFlows Found</h3>
+              <p className="text-gray-500">No payment streams for this address.</p>
               <p className="text-gray-400 text-sm mt-2 font-mono">{searchedAddress}</p>
             </div>
           )}
@@ -451,7 +530,7 @@ export default function VerifyPage() {
 
       <footer className="border-t border-gray-200 py-6 px-6">
         <div className="max-w-4xl mx-auto text-center text-sm text-gray-500">
-          SafeFlow — USDCx on Stacks
+          SafeFlow — Programmable USDCx Payment Streams on Stacks
         </div>
       </footer>
     </div>

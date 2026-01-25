@@ -1,0 +1,32 @@
+---
+id: 0
+name: Testnet deployment
+network: testnet
+stacks-node: "https://api.testnet.hiro.so"
+bitcoin-node: "http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332"
+plan:
+  batches:
+    - id: 0
+      transactions:
+        - contract-publish:
+            contract-name: sip-010-trait
+            expected-sender: ST1B0X4NF49B7XXYMDWN260E46FDQT9BSHF2BYSCY
+            cost: 9100
+            path: "contracts\\traits\\sip-010-trait.clar"
+            anchor-block-only: true
+            clarity-version: 2
+        - contract-publish:
+            contract-name: safeflow
+            expected-sender: ST1B0X4NF49B7XXYMDWN260E46FDQT9BSHF2BYSCY
+            cost: 158160
+            path: "contracts\\safeflow.clar"
+            anchor-block-only: true
+            clarity-version: 2
+        - contract-publish:
+            contract-name: usdcx
+            expected-sender: ST1B0X4NF49B7XXYMDWN260E46FDQT9BSHF2BYSCY
+            cost: 18180
+            path: "contracts\\usdcx.clar"
+            anchor-block-only: true
+            clarity-version: 2
+      epoch: "2.5"

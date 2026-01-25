@@ -5,21 +5,18 @@ authors = []
 telemetry = false
 cache_dir = "./.cache"
 
-# Blockchain simulation settings
-[repl.analysis]
-passes = ["check_checker"]
-check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
-
-# Network configurations
-[project.requirements]
-
-[[project.requirements]]
-contract_id = "ST1NXBK3K5YYMD6FD41MVNP3JS1GABZ8TRVX023PT.sip-010-trait-ft-standard"
-
+# REPL settings
 [repl]
 costs_version = 2
 parser_version = 2
-analysis = { passes = ["check_checker"] }
+
+[repl.analysis]
+passes = ["check_checker"]
+
+[repl.analysis.check_checker]
+trusted_sender = false
+trusted_caller = false
+callee_filter = false
 
 # ============================================
 # CONTRACT DEFINITIONS
@@ -37,8 +34,8 @@ path = "contracts/usdcx.clar"
 clarity_version = 2
 epoch = 2.5
 
-# DevPayments - Developer Payment Management
-[contracts.dev-payments]
-path = "contracts/dev-payments.clar"
+# SafeFlow - Cross-Chain Programmable Payment Streams
+[contracts.safeflow]
+path = "contracts/safeflow.clar"
 clarity_version = 2
 epoch = 2.5

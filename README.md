@@ -84,10 +84,22 @@ clarinet console
 
 | Function | Description |
 |----------|-------------|
-| `start-stream` | Create a new payment stream with locked USDCx |
-| `claim-drip` | Claim vested tokens based on current block height |
-| `cancel-stream` | Cancel stream and refund remaining (sender only) |
+| `create-safeflow` | Create a new payment stream with locked USDCx (anyone can create) |
+| `claim` | Claim vested tokens based on current block height |
+| `freeze-safeflow` | Pause the stream (admin only) |
+| `unfreeze-safeflow` | Resume a frozen stream (admin only) |
+| `cancel-safeflow` | Cancel stream and refund remaining USDCx to admin |
+| `update-drip-rate` | Modify the drip rate of an existing stream |
 | `get-claimable-amount` | Read-only: Calculate claimable amount |
+| `get-safeflow` | Read-only: Get SafeFlow details by ID |
+
+### SafeFlow Statuses
+
+| Status | Value | Description |
+|--------|-------|-------------|
+| Active | 1 | Normal operation, dripping to recipient |
+| Frozen | 2 | Paused, no dripping, can be resumed |
+| Cancelled | 3 | Terminated, remaining USDCx returned to admin |
 
 ### Streaming Math
 
