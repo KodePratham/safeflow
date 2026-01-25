@@ -248,103 +248,167 @@ export default function VerifyPage() {
     console.log('Searching SafeFlows for recipient:', targetAddress);
     console.log('Contract:', SAFEFLOW_CONTRACT.address + '.' + SAFEFLOW_CONTRACT.name);
 
+    const foundSafeflows: SafeFlowInfo[] = [];
+    const foundIds = new Set<number>();
+    
+    // Helper to add SafeFlow if not already present
+    const addSafeFlow = async (sfId: number) => {
+      if (foundIds.has(sfId)) return;
+      
+      try {
+        const sfResult = await callReadOnlyFunction({
+          network,
+          contractAddress: SAFEFLOW_CONTRACT.address,
+          contractName: SAFEFLOW_CONTRACT.name,
+          functionName: 'get-safeflow',
+          functionArgs: [uintCV(sfId)],
+          senderAddress: targetAddress,
+        });
+
+        const sf = cvToValue(sfResult);
+        if (!sf) return;
+        
+        // Verify this SafeFlow is for our target recipient
+        if (sf.recipient !== targetAddress) return;
+
+        const claimableResult = await callReadOnlyFunction({
+          network,
+          contractAddress: SAFEFLOW_CONTRACT.address,
+          contractName: SAFEFLOW_CONTRACT.name,
+          functionName: 'get-claimable-amount',
+          functionArgs: [uintCV(sfId)],
+          senderAddress: targetAddress,
+        });
+
+        const claimableValue = cvToValue(claimableResult);
+
+        const progressResult = await callReadOnlyFunction({
+          network,
+          contractAddress: SAFEFLOW_CONTRACT.address,
+          contractName: SAFEFLOW_CONTRACT.name,
+          functionName: 'get-safeflow-progress',
+          functionArgs: [uintCV(sfId)],
+          senderAddress: targetAddress,
+        });
+
+        const progressValue = cvToValue(progressResult);
+
+        foundIds.add(sfId);
+        foundSafeflows.push({
+          id: sfId,
+          admin: sf.admin,
+          recipient: sf.recipient,
+          title: sf.title,
+          description: sf.description,
+          totalAmount: BigInt(sf['total-amount']),
+          claimedAmount: BigInt(sf['claimed-amount']),
+          dripRate: BigInt(sf['drip-rate']),
+          dripInterval: sf['drip-interval'],
+          startBlock: Number(sf['start-block']),
+          lastClaimBlock: Number(sf['last-claim-block']),
+          status: Number(sf.status),
+          claimable: BigInt(claimableValue?.value || claimableValue || 0),
+          remaining: BigInt(sf['total-amount']) - BigInt(sf['claimed-amount']),
+          progress: Number(progressValue?.value || progressValue || 0),
+        });
+      } catch (err) {
+        console.error('Error fetching SafeFlow', sfId, ':', err);
+      }
+    };
+
     try {
-      // Get count of SafeFlows for this recipient
-      const countResult = await callReadOnlyFunction({
-        network,
-        contractAddress: SAFEFLOW_CONTRACT.address,
-        contractName: SAFEFLOW_CONTRACT.name,
-        functionName: 'get-recipient-safeflow-count',
-        functionArgs: [principalCV(targetAddress)],
-        senderAddress: targetAddress,
-      });
-
-      const countValue = cvToValue(countResult);
-      const count = Number(countValue);
-      console.log('Recipient SafeFlow count:', count, 'raw:', countValue);
-
-      if (count === 0) {
-        // This is not an error - just no SafeFlows yet
-        setSearchedAddress(targetAddress);
-        setIsSearching(false);
-        return;
-      }
-
-      const foundSafeflows: SafeFlowInfo[] = [];
-
-      for (let i = 0; i < count; i++) {
-        try {
-          const idResult = await callReadOnlyFunction({
-            network,
-            contractAddress: SAFEFLOW_CONTRACT.address,
-            contractName: SAFEFLOW_CONTRACT.name,
-            functionName: 'get-recipient-safeflow-id',
-            functionArgs: [principalCV(targetAddress), uintCV(i)],
-            senderAddress: targetAddress,
-          });
-
-          const idData = cvToValue(idResult);
-          console.log('Recipient SafeFlow ID at index', i, ':', idData);
-          if (!idData) continue;
-
-          const sfId = Number(idData.id);
-
-          const sfResult = await callReadOnlyFunction({
-            network,
-            contractAddress: SAFEFLOW_CONTRACT.address,
-            contractName: SAFEFLOW_CONTRACT.name,
-            functionName: 'get-safeflow',
-            functionArgs: [uintCV(sfId)],
-            senderAddress: targetAddress,
-          });
-
-          const sf = cvToValue(sfResult);
-          if (!sf) continue;
-
-          const claimableResult = await callReadOnlyFunction({
-            network,
-            contractAddress: SAFEFLOW_CONTRACT.address,
-            contractName: SAFEFLOW_CONTRACT.name,
-            functionName: 'get-claimable-amount',
-            functionArgs: [uintCV(sfId)],
-            senderAddress: targetAddress,
-          });
-
-          const claimableValue = cvToValue(claimableResult);
-
-          const progressResult = await callReadOnlyFunction({
-            network,
-            contractAddress: SAFEFLOW_CONTRACT.address,
-            contractName: SAFEFLOW_CONTRACT.name,
-            functionName: 'get-safeflow-progress',
-            functionArgs: [uintCV(sfId)],
-            senderAddress: targetAddress,
-          });
-
-          const progressValue = cvToValue(progressResult);
-
-          foundSafeflows.push({
-            id: sfId,
-            admin: sf.admin,
-            recipient: sf.recipient,
-            title: sf.title,
-            description: sf.description,
-            totalAmount: BigInt(sf['total-amount']),
-            claimedAmount: BigInt(sf['claimed-amount']),
-            dripRate: BigInt(sf['drip-rate']),
-            dripInterval: sf['drip-interval'],
-            startBlock: Number(sf['start-block']),
-            lastClaimBlock: Number(sf['last-claim-block']),
-            status: Number(sf.status),
-            claimable: BigInt(claimableValue?.value || claimableValue || 0),
-            remaining: BigInt(sf['total-amount']) - BigInt(sf['claimed-amount']),
-            progress: Number(progressValue?.value || progressValue || 0),
-          });
-        } catch (indexErr) {
-          console.error('Error fetching SafeFlow at index', i, ':', indexErr);
+      // Method 1: Search via Stacks API for transactions where this address was the recipient
+      console.log('Searching via Stacks API...');
+      try {
+        const apiUrl = `https://api.testnet.hiro.so/extended/v1/address/${SAFEFLOW_CONTRACT.address}.${SAFEFLOW_CONTRACT.name}/transactions?limit=100`;
+        const response = await fetch(apiUrl);
+        if (response.ok) {
+          const data = await response.json();
+          const createTxs = data.results?.filter((tx: { tx_type: string; contract_call?: { function_name: string }; tx_status: string }) => 
+            tx.tx_type === 'contract_call' &&
+            tx.contract_call?.function_name === 'create-safeflow' &&
+            tx.tx_status === 'success'
+          ) || [];
+          
+          console.log('Found create-safeflow transactions via API:', createTxs.length);
+          
+          for (const tx of createTxs) {
+            try {
+              const result = tx.tx_result;
+              if (result && result.repr) {
+                // Check if this SafeFlow's recipient matches our target
+                const recipientMatch = result.repr.match(/recipient '([^']+)/);
+                if (recipientMatch && recipientMatch[1] === targetAddress) {
+                  const idMatch = result.repr.match(/id u(\d+)/);
+                  if (idMatch) {
+                    const sfId = Number(idMatch[1]);
+                    console.log('Found SafeFlow ID from API:', sfId);
+                    await addSafeFlow(sfId);
+                  }
+                }
+              }
+            } catch (txErr) {
+              console.error('Failed to parse tx result:', txErr);
+            }
+          }
         }
+      } catch (apiErr) {
+        console.error('API search failed:', apiErr);
       }
 
+      // Method 2: Also try contract read-only calls
+      try {
+        const countResult = await callReadOnlyFunction({
+          network,
+          contractAddress: SAFEFLOW_CONTRACT.address,
+          contractName: SAFEFLOW_CONTRACT.name,
+          functionName: 'get-recipient-safeflow-count',
+          functionArgs: [principalCV(targetAddress)],
+          senderAddress: targetAddress,
+        });
+
+        const countValue = cvToValue(countResult);
+        const count = Number(countValue);
+        console.log('Recipient SafeFlow count from contract:', count);
+
+        if (count > 0) {
+          for (let i = 0; i < count; i++) {
+            try {
+              const idResult = await callReadOnlyFunction({
+                network,
+                contractAddress: SAFEFLOW_CONTRACT.address,
+                contractName: SAFEFLOW_CONTRACT.name,
+                functionName: 'get-recipient-safeflow-id',
+                functionArgs: [principalCV(targetAddress), uintCV(i)],
+                senderAddress: targetAddress,
+              });
+
+              const idData = cvToValue(idResult);
+              console.log('Recipient SafeFlow ID at index', i, ':', idData);
+              if (idData === null || idData === undefined) continue;
+
+              let sfId: number;
+              if (typeof idData === 'object' && 'id' in idData) {
+                const idVal = idData.id;
+                sfId = typeof idVal === 'object' && idVal?.value !== undefined ? Number(idVal.value) : Number(idVal);
+              } else {
+                sfId = Number(idData);
+              }
+              console.log('Parsed SafeFlow ID:', sfId);
+              
+              await addSafeFlow(sfId);
+            } catch (indexErr) {
+              console.error('Error fetching SafeFlow at index', i, ':', indexErr);
+            }
+          }
+        }
+      } catch (contractErr) {
+        console.error('Contract call failed:', contractErr);
+      }
+
+      // Sort by ID descending (newest first)
+      foundSafeflows.sort((a, b) => b.id - a.id);
+      
       setSafeflows(foundSafeflows);
       setSearchedAddress(targetAddress);
     } catch (err) {

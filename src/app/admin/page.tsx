@@ -45,6 +45,11 @@ const SAFEFLOW_CONTRACT = {
   name: 'safeflow',
 };
 
+// Debug: Log contract address on load
+console.log('=== CONTRACT CONFIG ===');
+console.log('SAFEFLOW_CONTRACT address:', SAFEFLOW_CONTRACT.address);
+console.log('Env var value:', process.env.NEXT_PUBLIC_SAFEFLOW_ADDRESS);
+
 // Local/custom USDCx contract for SafeFlow (used for local testing)
 const USDCX_CONTRACT = {
   address: process.env.NEXT_PUBLIC_USDCX_ADDRESS || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM',
@@ -249,13 +254,128 @@ export default function AdminPage() {
   const fetchMySafeFlows = useCallback(async () => {
     if (!user.address) return;
     
-    console.log('Fetching SafeFlows for admin:', user.address);
-    console.log('Using contract:', SAFEFLOW_CONTRACT.address + '.' + SAFEFLOW_CONTRACT.name);
+    console.log('=== FETCHING SAFEFLOWS ===');
+    console.log('Admin address:', user.address);
+    console.log('Contract:', SAFEFLOW_CONTRACT.address + '.' + SAFEFLOW_CONTRACT.name);
+    
+    // Quick test: Try to get SafeFlow ID 0 directly
+    try {
+      console.log('Testing direct get-safeflow call for ID 0...');
+      const testResult = await callReadOnlyFunction({
+        network,
+        contractAddress: SAFEFLOW_CONTRACT.address,
+        contractName: SAFEFLOW_CONTRACT.name,
+        functionName: 'get-safeflow',
+        functionArgs: [uintCV(0)],
+        senderAddress: user.address,
+      });
+      const testData = cvToValue(testResult);
+      console.log('Direct test - SafeFlow 0 exists:', testData ? 'YES' : 'NO', testData);
+    } catch (testErr) {
+      console.error('Direct test failed:', testErr);
+    }
     
     const safeflows: SafeFlowData[] = [];
+    const foundIds = new Set<number>();
     
+    // Helper to add SafeFlow if not already present
+    const addSafeFlow = (sf: SafeFlowData) => {
+      if (!foundIds.has(sf.id)) {
+        foundIds.add(sf.id);
+        safeflows.push(sf);
+      }
+    };
+    
+    // Method 1: Try Stacks API first (more reliable for recently created SafeFlows)
+    console.log('Trying Stacks API to find SafeFlows...');
+    const expectedContractId = `${SAFEFLOW_CONTRACT.address}.${SAFEFLOW_CONTRACT.name}`;
+    console.log('Looking for contract_id:', expectedContractId);
     try {
-      // Method 1: Try contract read-only calls
+      const apiUrl = `https://api.testnet.hiro.so/extended/v1/address/${user.address}/transactions?limit=50`;
+      console.log('Fetching transactions from:', apiUrl);
+      const response = await fetch(apiUrl);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Total transactions received:', data.results?.length);
+        
+        // Log all contract calls for debugging
+        const allContractCalls = data.results?.filter((tx: { tx_type: string }) => tx.tx_type === 'contract_call') || [];
+        console.log('Contract call transactions:', allContractCalls.length);
+        allContractCalls.forEach((tx: { contract_call?: { contract_id: string; function_name: string }; tx_status: string; tx_id: string }) => {
+          console.log('  - TX:', tx.tx_id?.slice(0, 10), 'contract:', tx.contract_call?.contract_id, 'fn:', tx.contract_call?.function_name, 'status:', tx.tx_status);
+        });
+        
+        const createTxs = data.results?.filter((tx: { tx_type: string; contract_call?: { contract_id: string; function_name: string }; tx_status: string }) => 
+          tx.tx_type === 'contract_call' &&
+          tx.contract_call?.contract_id === expectedContractId &&
+          tx.contract_call?.function_name === 'create-safeflow' &&
+          tx.tx_status === 'success'
+        ) || [];
+        
+        console.log('Matching create-safeflow transactions:', createTxs.length);
+        
+        // For each successful create-safeflow tx, get the SafeFlow data
+        for (const tx of createTxs) {
+          try {
+            const result = tx.tx_result;
+            console.log('Processing tx:', tx.tx_id?.slice(0, 10), 'result:', result);
+            if (result && result.repr) {
+              // Parse the result - it's a tuple with 'id' field
+              const idMatch = result.repr.match(/id u(\d+)/);
+              console.log('ID match:', idMatch);
+              if (idMatch) {
+                const sfId = Number(idMatch[1]);
+                console.log('Found SafeFlow ID from transaction:', sfId);
+                
+                try {
+                  const sfResult = await callReadOnlyFunction({
+                    network,
+                    contractAddress: SAFEFLOW_CONTRACT.address,
+                    contractName: SAFEFLOW_CONTRACT.name,
+                    functionName: 'get-safeflow',
+                    functionArgs: [uintCV(sfId)],
+                    senderAddress: user.address,
+                  });
+                  
+                  const sf = cvToValue(sfResult);
+                  console.log('SafeFlow data for ID', sfId, ':', sf);
+                  
+                  if (sf) {
+                    addSafeFlow({
+                      id: sfId,
+                      admin: sf.admin,
+                      recipient: sf.recipient,
+                      title: sf.title,
+                      description: sf.description,
+                      totalAmount: BigInt(sf['total-amount']),
+                      claimedAmount: BigInt(sf['claimed-amount']),
+                      dripRate: BigInt(sf['drip-rate']),
+                      dripInterval: sf['drip-interval'],
+                      startBlock: Number(sf['start-block']),
+                      lastClaimBlock: Number(sf['last-claim-block']),
+                      status: Number(sf.status),
+                      createdAt: Number(sf['created-at']),
+                    });
+                    console.log('Added SafeFlow:', sfId);
+                  } else {
+                    console.log('get-safeflow returned null for ID:', sfId);
+                  }
+                } catch (getErr) {
+                  console.error('Failed to get SafeFlow data for ID', sfId, ':', getErr);
+                }
+              }
+            }
+          } catch (txErr) {
+            console.error('Failed to parse tx result:', txErr);
+          }
+        }
+      }
+    } catch (apiErr) {
+      console.error('API fetch failed:', apiErr);
+    }
+    
+    // Method 2: Also try contract read-only calls for any SafeFlows not found via API
+    try {
       const countResult = await callReadOnlyFunction({
         network,
         contractAddress: SAFEFLOW_CONTRACT.address,
@@ -283,9 +403,23 @@ export default function AdminPage() {
             
             const idData = cvToValue(idResult);
             console.log('SafeFlow ID result at index', i, ':', idData);
-            if (!idData) continue;
+            if (idData === null || idData === undefined) continue;
             
-            const sfId = Number(idData.id);
+            // Handle different possible formats: {id: 0}, {id: {value: 0}}, or direct value
+            let sfId: number;
+            if (typeof idData === 'object' && 'id' in idData) {
+              const idVal = idData.id;
+              sfId = typeof idVal === 'object' && idVal?.value !== undefined ? Number(idVal.value) : Number(idVal);
+            } else {
+              sfId = Number(idData);
+            }
+            console.log('Parsed SafeFlow ID:', sfId);
+            
+            // Skip if already found via API
+            if (foundIds.has(sfId)) {
+              console.log('SafeFlow ID', sfId, 'already found via API, skipping');
+              continue;
+            }
             
             const sfResult = await callReadOnlyFunction({
               network,
@@ -300,7 +434,7 @@ export default function AdminPage() {
             console.log('SafeFlow data for ID', sfId, ':', sf);
             if (!sf) continue;
             
-            safeflows.push({
+            addSafeFlow({
               id: sfId,
               admin: sf.admin,
               recipient: sf.recipient,
@@ -322,74 +456,14 @@ export default function AdminPage() {
       }
     } catch (err) {
       console.error('Contract call failed:', err);
-      
-      // Method 2: Fallback - query Stacks API for recent transactions
-      console.log('Trying Stacks API fallback...');
-      try {
-        const apiUrl = `https://api.testnet.hiro.so/extended/v1/address/${user.address}/transactions?limit=50`;
-        const response = await fetch(apiUrl);
-        if (response.ok) {
-          const data = await response.json();
-          const createTxs = data.results?.filter((tx: { tx_type: string; contract_call?: { contract_id: string; function_name: string }; tx_status: string }) => 
-            tx.tx_type === 'contract_call' &&
-            tx.contract_call?.contract_id === `${SAFEFLOW_CONTRACT.address}.${SAFEFLOW_CONTRACT.name}` &&
-            tx.contract_call?.function_name === 'create-safeflow' &&
-            tx.tx_status === 'success'
-          ) || [];
-          
-          console.log('Found create-safeflow transactions via API:', createTxs.length);
-          
-          // For each successful create-safeflow tx, try to get the SafeFlow data
-          for (const tx of createTxs) {
-            try {
-              // Get SafeFlow ID from tx result if available
-              const result = tx.tx_result;
-              if (result && result.repr) {
-                // Parse the result - it's a tuple with 'id' field
-                const idMatch = result.repr.match(/id u(\d+)/);
-                if (idMatch) {
-                  const sfId = Number(idMatch[1]);
-                  
-                  const sfResult = await callReadOnlyFunction({
-                    network,
-                    contractAddress: SAFEFLOW_CONTRACT.address,
-                    contractName: SAFEFLOW_CONTRACT.name,
-                    functionName: 'get-safeflow',
-                    functionArgs: [uintCV(sfId)],
-                    senderAddress: user.address,
-                  });
-                  
-                  const sf = cvToValue(sfResult);
-                  if (sf && !safeflows.some(s => s.id === sfId)) {
-                    safeflows.push({
-                      id: sfId,
-                      admin: sf.admin,
-                      recipient: sf.recipient,
-                      title: sf.title,
-                      description: sf.description,
-                      totalAmount: BigInt(sf['total-amount']),
-                      claimedAmount: BigInt(sf['claimed-amount']),
-                      dripRate: BigInt(sf['drip-rate']),
-                      dripInterval: sf['drip-interval'],
-                      startBlock: Number(sf['start-block']),
-                      lastClaimBlock: Number(sf['last-claim-block']),
-                      status: Number(sf.status),
-                      createdAt: Number(sf['created-at']),
-                    });
-                  }
-                }
-              }
-            } catch (txErr) {
-              console.error('Failed to parse tx result:', txErr);
-            }
-          }
-        }
-      } catch (apiErr) {
-        console.error('API fallback failed:', apiErr);
-      }
     }
     
+    // Sort by ID descending (newest first)
+    safeflows.sort((a, b) => b.id - a.id);
+    
+    console.log('=== FINAL RESULT ===');
     console.log('Total SafeFlows found:', safeflows.length);
+    console.log('SafeFlows:', safeflows.map(sf => ({ id: sf.id, title: sf.title, admin: sf.admin })));
     setMySafeFlows(safeflows);
   }, [user.address]);
 
