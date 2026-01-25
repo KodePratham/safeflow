@@ -339,24 +339,40 @@ export default function AdminPage() {
                   
                   const sf = cvToValue(sfResult);
                   console.log('SafeFlow data for ID', sfId, ':', sf);
+                  console.log('SafeFlow keys:', sf ? Object.keys(sf) : 'null');
                   
                   if (sf) {
-                    addSafeFlow({
-                      id: sfId,
-                      admin: sf.admin,
-                      recipient: sf.recipient,
-                      title: sf.title,
-                      description: sf.description,
-                      totalAmount: BigInt(sf['total-amount']),
-                      claimedAmount: BigInt(sf['claimed-amount']),
-                      dripRate: BigInt(sf['drip-rate']),
-                      dripInterval: sf['drip-interval'],
-                      startBlock: Number(sf['start-block']),
-                      lastClaimBlock: Number(sf['last-claim-block']),
-                      status: Number(sf.status),
-                      createdAt: Number(sf['created-at']),
-                    });
-                    console.log('Added SafeFlow:', sfId);
+                    // Handle both kebab-case and camelCase field names from cvToValue
+                    const totalAmount = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
+                    const claimedAmount = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
+                    const dripRate = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
+                    const dripInterval = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
+                    const startBlock = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
+                    const lastClaimBlock = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
+                    const createdAt = sf['created-at'] ?? sf.createdAt ?? sf.created_at;
+                    
+                    console.log('Parsed values:', { totalAmount, claimedAmount, dripRate, dripInterval, startBlock });
+                    
+                    if (totalAmount !== undefined) {
+                      addSafeFlow({
+                        id: sfId,
+                        admin: sf.admin,
+                        recipient: sf.recipient,
+                        title: sf.title,
+                        description: sf.description,
+                        totalAmount: BigInt(totalAmount),
+                        claimedAmount: BigInt(claimedAmount || 0),
+                        dripRate: BigInt(dripRate || 0),
+                        dripInterval: dripInterval || 'daily',
+                        startBlock: Number(startBlock || 0),
+                        lastClaimBlock: Number(lastClaimBlock || 0),
+                        status: Number(sf.status || 1),
+                        createdAt: Number(createdAt || 0),
+                      });
+                      console.log('Added SafeFlow:', sfId);
+                    } else {
+                      console.error('Could not find totalAmount field in SafeFlow data');
+                    }
                   } else {
                     console.log('get-safeflow returned null for ID:', sfId);
                   }
@@ -406,14 +422,41 @@ export default function AdminPage() {
             if (idData === null || idData === undefined) continue;
             
             // Handle different possible formats: {id: 0}, {id: {value: 0}}, or direct value
-            let sfId: number;
-            if (typeof idData === 'object' && 'id' in idData) {
-              const idVal = idData.id;
-              sfId = typeof idVal === 'object' && idVal?.value !== undefined ? Number(idVal.value) : Number(idVal);
-            } else {
+            // Parse the ID - cvToValue can return different structures
+            // Could be: {id: 0}, {id: {value: 0}}, {value: {id: 0}}, or nested value objects
+            let sfId: number = NaN;
+            console.log('Raw idData type:', typeof idData, 'value:', JSON.stringify(idData));
+            
+            if (typeof idData === 'number') {
+              sfId = idData;
+            } else if (typeof idData === 'bigint') {
               sfId = Number(idData);
+            } else if (typeof idData === 'object' && idData !== null) {
+              // Try various structures
+              if ('id' in idData) {
+                const idVal = idData.id;
+                if (typeof idVal === 'number') {
+                  sfId = idVal;
+                } else if (typeof idVal === 'bigint') {
+                  sfId = Number(idVal);
+                } else if (typeof idVal === 'object' && idVal !== null) {
+                  sfId = Number(idVal.value ?? idVal);
+                }
+              } else if ('value' in idData) {
+                const val = idData.value;
+                if (typeof val === 'object' && val !== null && 'id' in val) {
+                  sfId = Number(val.id);
+                } else {
+                  sfId = Number(val);
+                }
+              }
             }
             console.log('Parsed SafeFlow ID:', sfId);
+            
+            if (isNaN(sfId)) {
+              console.error('Could not parse SafeFlow ID from:', idData);
+              continue;
+            }
             
             // Skip if already found via API
             if (foundIds.has(sfId)) {
@@ -434,21 +477,32 @@ export default function AdminPage() {
             console.log('SafeFlow data for ID', sfId, ':', sf);
             if (!sf) continue;
             
-            addSafeFlow({
-              id: sfId,
-              admin: sf.admin,
-              recipient: sf.recipient,
-              title: sf.title,
-              description: sf.description,
-              totalAmount: BigInt(sf['total-amount']),
-              claimedAmount: BigInt(sf['claimed-amount']),
-              dripRate: BigInt(sf['drip-rate']),
-              dripInterval: sf['drip-interval'],
-              startBlock: Number(sf['start-block']),
-              lastClaimBlock: Number(sf['last-claim-block']),
-              status: Number(sf.status),
-              createdAt: Number(sf['created-at']),
-            });
+            // Handle both kebab-case and camelCase field names from cvToValue
+            const totalAmount = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
+            const claimedAmount = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
+            const dripRate = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
+            const dripInterval = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
+            const startBlock = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
+            const lastClaimBlock = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
+            const createdAt = sf['created-at'] ?? sf.createdAt ?? sf.created_at;
+            
+            if (totalAmount !== undefined) {
+              addSafeFlow({
+                id: sfId,
+                admin: sf.admin,
+                recipient: sf.recipient,
+                title: sf.title,
+                description: sf.description,
+                totalAmount: BigInt(totalAmount),
+                claimedAmount: BigInt(claimedAmount || 0),
+                dripRate: BigInt(dripRate || 0),
+                dripInterval: dripInterval || 'daily',
+                startBlock: Number(startBlock || 0),
+                lastClaimBlock: Number(lastClaimBlock || 0),
+                status: Number(sf.status || 1),
+                createdAt: Number(createdAt || 0),
+              });
+            }
           } catch (err) {
             console.error('Failed to fetch SafeFlow at index', i, ':', err);
           }

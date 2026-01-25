@@ -204,21 +204,29 @@ export default function VerifyPage() {
 
       const progressValue = cvToValue(progressResult);
 
+      // Handle both kebab-case and camelCase field names from cvToValue
+      const totalAmount = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
+      const claimedAmount = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
+      const dripRate = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
+      const dripInterval = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
+      const startBlock = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
+      const lastClaimBlock = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
+
       const foundSafeflow: SafeFlowInfo = {
         id: sfId,
         admin: sf.admin,
         recipient: sf.recipient,
         title: sf.title,
         description: sf.description,
-        totalAmount: BigInt(sf['total-amount']),
-        claimedAmount: BigInt(sf['claimed-amount']),
-        dripRate: BigInt(sf['drip-rate']),
-        dripInterval: sf['drip-interval'],
-        startBlock: Number(sf['start-block']),
-        lastClaimBlock: Number(sf['last-claim-block']),
-        status: Number(sf.status),
+        totalAmount: BigInt(totalAmount || 0),
+        claimedAmount: BigInt(claimedAmount || 0),
+        dripRate: BigInt(dripRate || 0),
+        dripInterval: dripInterval || 'daily',
+        startBlock: Number(startBlock || 0),
+        lastClaimBlock: Number(lastClaimBlock || 0),
+        status: Number(sf.status || 1),
         claimable: BigInt(claimableValue?.value || claimableValue || 0),
-        remaining: BigInt(sf['total-amount']) - BigInt(sf['claimed-amount']),
+        remaining: BigInt(totalAmount || 0) - BigInt(claimedAmount || 0),
         progress: Number(progressValue?.value || progressValue || 0),
       };
 
@@ -293,6 +301,19 @@ export default function VerifyPage() {
 
         const progressValue = cvToValue(progressResult);
 
+        // Handle both kebab-case and camelCase field names from cvToValue
+        const totalAmount = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
+        const claimedAmount = sf['claimed-amount'] ?? sf.claimedAmount ?? sf.claimed_amount;
+        const dripRate = sf['drip-rate'] ?? sf.dripRate ?? sf.drip_rate;
+        const dripInterval = sf['drip-interval'] ?? sf.dripInterval ?? sf.drip_interval;
+        const startBlock = sf['start-block'] ?? sf.startBlock ?? sf.start_block;
+        const lastClaimBlock = sf['last-claim-block'] ?? sf.lastClaimBlock ?? sf.last_claim_block;
+        
+        if (totalAmount === undefined) {
+          console.error('Could not find totalAmount field in SafeFlow data');
+          return;
+        }
+        
         foundIds.add(sfId);
         foundSafeflows.push({
           id: sfId,
@@ -300,15 +321,15 @@ export default function VerifyPage() {
           recipient: sf.recipient,
           title: sf.title,
           description: sf.description,
-          totalAmount: BigInt(sf['total-amount']),
-          claimedAmount: BigInt(sf['claimed-amount']),
-          dripRate: BigInt(sf['drip-rate']),
-          dripInterval: sf['drip-interval'],
-          startBlock: Number(sf['start-block']),
-          lastClaimBlock: Number(sf['last-claim-block']),
-          status: Number(sf.status),
+          totalAmount: BigInt(totalAmount),
+          claimedAmount: BigInt(claimedAmount || 0),
+          dripRate: BigInt(dripRate || 0),
+          dripInterval: dripInterval || 'daily',
+          startBlock: Number(startBlock || 0),
+          lastClaimBlock: Number(lastClaimBlock || 0),
+          status: Number(sf.status || 1),
           claimable: BigInt(claimableValue?.value || claimableValue || 0),
-          remaining: BigInt(sf['total-amount']) - BigInt(sf['claimed-amount']),
+          remaining: BigInt(totalAmount) - BigInt(claimedAmount || 0),
           progress: Number(progressValue?.value || progressValue || 0),
         });
       } catch (err) {
@@ -387,14 +408,40 @@ export default function VerifyPage() {
               console.log('Recipient SafeFlow ID at index', i, ':', idData);
               if (idData === null || idData === undefined) continue;
 
-              let sfId: number;
-              if (typeof idData === 'object' && 'id' in idData) {
-                const idVal = idData.id;
-                sfId = typeof idVal === 'object' && idVal?.value !== undefined ? Number(idVal.value) : Number(idVal);
-              } else {
+              // Parse the ID - cvToValue can return different structures
+              let sfId: number = NaN;
+              console.log('Raw idData type:', typeof idData, 'value:', JSON.stringify(idData));
+              
+              if (typeof idData === 'number') {
+                sfId = idData;
+              } else if (typeof idData === 'bigint') {
                 sfId = Number(idData);
+              } else if (typeof idData === 'object' && idData !== null) {
+                // Try various structures
+                if ('id' in idData) {
+                  const idVal = idData.id;
+                  if (typeof idVal === 'number') {
+                    sfId = idVal;
+                  } else if (typeof idVal === 'bigint') {
+                    sfId = Number(idVal);
+                  } else if (typeof idVal === 'object' && idVal !== null) {
+                    sfId = Number(idVal.value ?? idVal);
+                  }
+                } else if ('value' in idData) {
+                  const val = idData.value;
+                  if (typeof val === 'object' && val !== null && 'id' in val) {
+                    sfId = Number(val.id);
+                  } else {
+                    sfId = Number(val);
+                  }
+                }
               }
               console.log('Parsed SafeFlow ID:', sfId);
+              
+              if (isNaN(sfId)) {
+                console.error('Could not parse SafeFlow ID from:', idData);
+                continue;
+              }
               
               await addSafeFlow(sfId);
             } catch (indexErr) {
