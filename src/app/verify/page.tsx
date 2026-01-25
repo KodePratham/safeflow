@@ -259,7 +259,7 @@ export default function VerifyPage() {
       };
 
       setSafeflows([foundSafeflow]);
-      setSearchedAddress(sf.recipient);
+      setSearchedAddress(String(extractValue(sf.recipient) || ''));
     } catch (err) {
       console.error('Search by ID error:', err);
       setError(`Failed to fetch SafeFlow #${searchId}. It may not exist.`);
