@@ -194,8 +194,10 @@ export default function AdminPage() {
     usdcBalance: '0',
   });
 
-  // USDCx balance on Stacks
+  // USDCx balance on Stacks - tracks balances per contract
   const [usdcxBalance, setUsdcxBalance] = useState<bigint>(0n);
+  const [usdcxBalances, setUsdcxBalances] = useState<{ contract: string; address: string; name: string; assetName: string; balance: bigint }[]>([]);
+  const [activeUsdcxContract, setActiveUsdcxContract] = useState<{ address: string; name: string; assetName: string } | null>(null);
   const [previousUsdcxBalance, setPreviousUsdcxBalance] = useState<bigint>(0n);
   
   // Pending bridge transactions
@@ -396,7 +398,23 @@ export default function AdminPage() {
     if (!user.address) return;
     
     let totalBalance = 0n;
-    const foundBalances: { contract: string; balance: bigint }[] = [];
+    const foundBalances: { contract: string; address: string; name: string; assetName: string; balance: bigint }[] = [];
+    
+    // Helper to parse contract ID into address, name, and asset name
+    // Format: "ST...ADDRESS.contract-name::asset-name"
+    const parseContractId = (contractId: string): { address: string; name: string; assetName: string } => {
+      // Split by :: to get asset name
+      const [contractPart, assetName] = contractId.split('::');
+      const parts = contractPart.split('.');
+      if (parts.length >= 2) {
+        return { 
+          address: parts[0], 
+          name: parts[1], 
+          assetName: assetName || 'usdcx' // fallback to 'usdcx' if not specified
+        };
+      }
+      return { address: contractId, name: 'usdcx', assetName: assetName || 'usdcx' };
+    };
     
     // 1. First, try to fetch from Stacks API to get all fungible token holdings
     try {
@@ -413,9 +431,16 @@ export default function AdminPage() {
             if (lowerTokenId.includes('usdcx') || lowerTokenId.includes('usdc')) {
               const tokenBalance = BigInt((tokenData as { balance: string }).balance || '0');
               if (tokenBalance > 0n) {
-                foundBalances.push({ contract: tokenId, balance: tokenBalance });
+                const parsed = parseContractId(tokenId);
+                foundBalances.push({ 
+                  contract: tokenId, 
+                  address: parsed.address,
+                  name: parsed.name,
+                  assetName: parsed.assetName,
+                  balance: tokenBalance 
+                });
                 totalBalance += tokenBalance;
-                console.log(`Found USDCx balance via API: ${tokenId} = ${tokenBalance}`);
+                console.log(`Found USDCx balance via API: ${tokenId} = ${tokenBalance} (asset: ${parsed.assetName})`);
               }
             }
           }
@@ -462,7 +487,13 @@ export default function AdminPage() {
         const balance = BigInt(balanceValue?.value || balanceValue || 0);
         
         if (balance > 0n) {
-          foundBalances.push({ contract: contractId, balance });
+          foundBalances.push({ 
+            contract: contractId, 
+            address: contract.address,
+            name: contract.name,
+            assetName: 'usdcx', // Default asset name for contract calls
+            balance 
+          });
           totalBalance += balance;
           console.log(`Found USDCx balance via contract call: ${contractId} = ${balance}`);
         }
@@ -476,8 +507,20 @@ export default function AdminPage() {
     if (foundBalances.length > 0) {
       console.log('USDCx balance summary:', foundBalances);
       console.log('Total USDCx balance:', totalBalance.toString());
+      
+      // Sort by balance descending and set the one with highest balance as active
+      foundBalances.sort((a, b) => Number(b.balance - a.balance));
+      setUsdcxBalances(foundBalances);
+      setActiveUsdcxContract({ 
+        address: foundBalances[0].address, 
+        name: foundBalances[0].name,
+        assetName: foundBalances[0].assetName 
+      });
+      console.log('Active USDCx contract set to:', foundBalances[0].contract, 'asset:', foundBalances[0].assetName);
     } else {
       console.log('No USDCx balance found in any known contracts');
+      setUsdcxBalances([]);
+      setActiveUsdcxContract(null);
     }
     
     setUsdcxBalance(totalBalance);
@@ -809,6 +852,19 @@ export default function AdminPage() {
       return;
     }
 
+    // Validate that we have an active USDCx contract with balance
+    if (!activeUsdcxContract) {
+      setError('No USDCx contract found with balance. Please bridge USDC first or refresh your balance.');
+      return;
+    }
+
+    // Find which contract has enough balance for this transaction
+    const contractWithBalance = usdcxBalances.find(c => c.balance >= totalMicroCheck);
+    if (!contractWithBalance) {
+      setError(`No single USDCx contract has enough balance. You need ${totalAmount} USDCx in one contract.`);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setSuccess(null);
@@ -817,12 +873,23 @@ export default function AdminPage() {
       const totalMicro = parseUSDCx(totalAmount);
       const dripMicro = parseUSDCx(dripAmount);
 
+      // Use the contract that has the balance, including the correct asset name
+      const tokenContract = {
+        address: contractWithBalance.address,
+        name: contractWithBalance.name,
+        assetName: contractWithBalance.assetName,
+      };
+
+      console.log('Creating SafeFlow with token contract:', `${tokenContract.address}.${tokenContract.name}`);
+      console.log('Asset name for post-condition:', tokenContract.assetName);
+      console.log('Amount:', totalMicro.toString(), 'micro USDCx');
+
       const postConditions = [
         makeStandardFungiblePostCondition(
           user.address,
           FungibleConditionCode.Equal,
           totalMicro,
-          createAssetInfo(USDCX_CONTRACT.address, USDCX_CONTRACT.name, 'usdcx')
+          createAssetInfo(tokenContract.address, tokenContract.name, tokenContract.assetName)
         ),
       ];
 
@@ -832,7 +899,7 @@ export default function AdminPage() {
         contractName: SAFEFLOW_CONTRACT.name,
         functionName: 'create-safeflow',
         functionArgs: [
-          contractPrincipalCV(USDCX_CONTRACT.address, USDCX_CONTRACT.name),
+          contractPrincipalCV(tokenContract.address, tokenContract.name),
           principalCV(recipientAddress),
           stringUtf8CV(title),
           stringUtf8CV(description || 'No description'),
@@ -843,7 +910,7 @@ export default function AdminPage() {
         postConditionMode: PostConditionMode.Deny,
         postConditions,
         onFinish: async (data) => {
-          setSuccess(`SafeFlow created! TX: ${data.txId} - Waiting for confirmation...`);
+          setSuccess(`SafeFlow created! TX: ${data.txId} - Waiting for confirmation... View on explorer: https://explorer.stacks.co/txid/${data.txId}?chain=testnet`);
           setRecipientAddress('');
           setTotalAmount('');
           setDripAmount('');
@@ -1094,6 +1161,18 @@ export default function AdminPage() {
                     <div>
                       <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Your USDCx Balance on Stacks</p>
                       <p className="text-2xl font-mono text-orange-500">${formatUSDCx(usdcxBalance)} USDCx</p>
+                      {usdcxBalances.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {usdcxBalances.map((bal, idx) => (
+                            <p key={idx} className="text-xs text-gray-500 font-mono">
+                              {formatUSDCx(bal.balance)} from {bal.address.slice(0, 8)}...{bal.name}::{bal.assetName}
+                              {activeUsdcxContract?.address === bal.address && (
+                                <span className="text-green-500 ml-2">[ACTIVE]</span>
+                              )}
+                            </p>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={fetchUsdcxBalance}
@@ -1231,9 +1310,19 @@ export default function AdminPage() {
                     <span className="text-xs uppercase text-gray-400">Your USDCx Balance:</span>
                     <span className="font-mono text-orange-500 text-lg">${formatUSDCx(usdcxBalance)} USDCx</span>
                   </div>
+                  {activeUsdcxContract && (
+                    <p className="text-xs text-gray-500 mt-1 font-mono">
+                      Using: {activeUsdcxContract.address.slice(0, 12)}...{activeUsdcxContract.name}::{activeUsdcxContract.assetName}
+                    </p>
+                  )}
                   {usdcxBalance === 0n && (
                     <p className="text-xs text-orange-700 mt-2 font-mono">
                       ⚠ You need USDCx to create a SafeFlow. <button onClick={() => setActiveTab('bridge')} className="underline font-bold uppercase">Bridge USDC first</button>
+                    </p>
+                  )}
+                  {usdcxBalance > 0n && !activeUsdcxContract && (
+                    <p className="text-xs text-yellow-500 mt-2 font-mono">
+                      ⚠ Could not detect USDCx contract. <button onClick={fetchUsdcxBalance} className="underline font-bold uppercase">Refresh Balance</button>
                     </p>
                   )}
                 </div>
