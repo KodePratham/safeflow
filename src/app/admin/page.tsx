@@ -921,7 +921,7 @@ export default function AdminPage() {
                     })}
                   </div>
                   <p className="text-xs text-gray-500 mt-3 font-mono">
-                    > Your USDCx balance will update automatically when the bridge completes.
+                    ℹ Your USDCx balance will update automatically when the bridge completes.
                   </p>
                 </div>
               )}
@@ -1017,7 +1017,7 @@ export default function AdminPage() {
                   </div>
                   {usdcxBalance === 0n && (
                     <p className="text-xs text-orange-700 mt-2 font-mono">
-                      > You need USDCx to create a SafeFlow. <button onClick={() => setActiveTab('bridge')} className="underline font-bold uppercase">Bridge USDC first</button>
+                      ⚠ You need USDCx to create a SafeFlow. <button onClick={() => setActiveTab('bridge')} className="underline font-bold uppercase">Bridge USDC first</button>
                     </p>
                   )}
                 </div>
@@ -1298,7 +1298,7 @@ export default function AdminPage() {
                     <li>USDCx is minted to your Stacks wallet</li>
                   </ol>
                   <p className="text-sm text-white mt-3 font-mono">
-                    > Stay on this page - your balance will update automatically!
+                    ✓ Stay on this page - your balance will update automatically!
                   </p>
                 </div>
               )}
