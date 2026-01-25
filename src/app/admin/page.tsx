@@ -347,11 +347,17 @@ export default function AdminPage() {
                     senderAddress: user.address,
                   });
                   
-                  const sf = cvToValue(sfResult);
-                  console.log('SafeFlow data for ID', sfId, ':', sf);
-                  console.log('SafeFlow keys:', sf ? Object.keys(sf) : 'null');
+                  const sfRaw = cvToValue(sfResult);
+                  console.log('SafeFlow data for ID', sfId, ':', sfRaw);
                   
-                  if (sf) {
+                  if (sfRaw) {
+                    // cvToValue returns {type: '(tuple ...)', value: {...}} for optionals
+                    // Unwrap to get the actual tuple data
+                    const sf = (typeof sfRaw === 'object' && sfRaw !== null && 'value' in sfRaw && typeof (sfRaw as Record<string, unknown>).value === 'object')
+                      ? (sfRaw as Record<string, unknown>).value as Record<string, unknown>
+                      : sfRaw as Record<string, unknown>;
+                    console.log('Unwrapped SafeFlow data:', sf, 'keys:', Object.keys(sf));
+                    
                     // Handle both kebab-case and camelCase field names from cvToValue
                     // Use extractValue to unwrap nested {value: X} structures
                     const totalAmountRaw = sf['total-amount'] ?? sf.totalAmount ?? sf.total_amount;
@@ -502,9 +508,16 @@ export default function AdminPage() {
               senderAddress: user.address,
             });
             
-            const sf = cvToValue(sfResult);
-            console.log('SafeFlow data for ID', sfId, ':', sf);
-            if (!sf) continue;
+            const sfRaw = cvToValue(sfResult);
+            console.log('SafeFlow data for ID', sfId, ':', sfRaw);
+            if (!sfRaw) continue;
+            
+            // cvToValue returns {type: '(tuple ...)', value: {...}} for optionals
+            // Unwrap to get the actual tuple data
+            const sf = (typeof sfRaw === 'object' && sfRaw !== null && 'value' in sfRaw && typeof (sfRaw as Record<string, unknown>).value === 'object')
+              ? (sfRaw as Record<string, unknown>).value as Record<string, unknown>
+              : sfRaw as Record<string, unknown>;
+            console.log('Unwrapped SafeFlow data:', sf);
             
             // Handle both kebab-case and camelCase field names from cvToValue
             // Use extractValue to unwrap nested {value: X} structures

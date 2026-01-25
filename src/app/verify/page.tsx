@@ -183,14 +183,21 @@ export default function VerifyPage() {
         senderAddress: user.address || SAFEFLOW_CONTRACT.address,
       });
 
-      const sf = cvToValue(sfResult);
-      console.log('SafeFlow result:', sf);
+      const sfRaw = cvToValue(sfResult);
+      console.log('SafeFlow result:', sfRaw);
 
-      if (!sf) {
+      if (!sfRaw) {
         setError(`SafeFlow #${sfId} not found`);
         setIsSearching(false);
         return;
       }
+      
+      // cvToValue returns {type: '(tuple ...)', value: {...}} for optionals
+      // Unwrap to get the actual tuple data
+      const sf = (typeof sfRaw === 'object' && sfRaw !== null && 'value' in sfRaw && typeof (sfRaw as Record<string, unknown>).value === 'object')
+        ? (sfRaw as Record<string, unknown>).value as Record<string, unknown>
+        : sfRaw as Record<string, unknown>;
+      console.log('Unwrapped SafeFlow data:', sf);
 
       const claimableResult = await callReadOnlyFunction({
         network,
@@ -294,8 +301,14 @@ export default function VerifyPage() {
           senderAddress: targetAddress,
         });
 
-        const sf = cvToValue(sfResult);
-        if (!sf) return;
+        const sfRaw = cvToValue(sfResult);
+        if (!sfRaw) return;
+        
+        // cvToValue returns {type: '(tuple ...)', value: {...}} for optionals
+        // Unwrap to get the actual tuple data
+        const sf = (typeof sfRaw === 'object' && sfRaw !== null && 'value' in sfRaw && typeof (sfRaw as Record<string, unknown>).value === 'object')
+          ? (sfRaw as Record<string, unknown>).value as Record<string, unknown>
+          : sfRaw as Record<string, unknown>;
         
         // Verify this SafeFlow is for our target recipient
         // Extract recipient value from potential nested structure
