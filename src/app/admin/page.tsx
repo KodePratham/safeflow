@@ -154,10 +154,10 @@ function getStatusText(status: number): string {
 
 function getStatusColor(status: number): string {
   switch (status) {
-    case 1: return 'bg-green-50 text-green-700 border-green-200';
-    case 2: return 'bg-blue-50 text-blue-700 border-blue-200';
-    case 3: return 'bg-red-50 text-red-700 border-red-200';
-    default: return 'bg-gray-100 text-gray-600 border-gray-200';
+    case 1: return 'text-green-500 border-green-500';
+    case 2: return 'text-blue-500 border-blue-500';
+    case 3: return 'text-red-500 border-red-500';
+    default: return 'text-gray-500 border-gray-500';
   }
 }
 
@@ -361,7 +361,7 @@ export default function AdminPage() {
     if (usdcxBalance > previousUsdcxBalance && previousUsdcxBalance > 0n) {
       // Balance increased - likely bridge completed
       const increased = usdcxBalance - previousUsdcxBalance;
-      setSuccess(`🎉 Bridge complete! Received ${formatUSDCx(increased)} USDCx`);
+      setSuccess(`BRIDGE COMPLETE! RECEIVED ${formatUSDCx(increased)} USDCx`);
       
       // Mark pending transactions as completed
       const updated = pendingBridgeTxs.map(tx => 
@@ -787,32 +787,32 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="border-b border-gray-200 py-4 px-6">
+    <div className="min-h-screen flex flex-col bg-black text-white">
+      <header className="border-b-2 border-gray-800 py-4 px-6">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold text-orange-500">SafeFlow</Link>
+          <Link href="/" className="text-xl text-orange-500 uppercase tracking-widest">SafeFlow</Link>
           <div className="flex items-center gap-4">
-            <Link href="/verify" className="text-gray-600 hover:text-orange-500">Verify</Link>
+            <Link href="/verify" className="text-gray-400 hover:text-orange-500 text-sm uppercase tracking-widest transition-none">Verify</Link>
             
             {evmWallet.isConnected ? (
-              <span className="text-sm text-gray-600 border border-gray-200 px-3 py-1 rounded">
+              <span className="text-xs text-gray-400 border border-gray-800 px-3 py-1 font-mono uppercase">
                 ETH: {evmWallet.address?.slice(0, 6)}...
               </span>
             ) : (
-              <button onClick={connectEvmWallet} disabled={isLoading} className="text-sm text-gray-600 hover:text-orange-500">
-                Connect Ethereum
+              <button onClick={connectEvmWallet} disabled={isLoading} className="text-xs text-gray-400 hover:text-orange-500 uppercase tracking-wider transition-none">
+                Connect ETH
               </button>
             )}
             
             {user.isConnected ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600 border border-gray-200 px-3 py-1 rounded">
+                <span className="text-xs text-gray-400 border border-gray-800 px-3 py-1 font-mono uppercase">
                   STX: {user.address?.slice(0, 6)}...
                 </span>
-                <button onClick={disconnectWallet} className="text-gray-400 hover:text-gray-600">×</button>
+                <button onClick={disconnectWallet} className="text-gray-400 hover:text-white transition-none">×</button>
               </div>
             ) : (
-              <button onClick={connectWallet} className="btn-primary text-sm py-2">
+              <button onClick={connectWallet} className="btn-primary text-xs py-2">
                 Connect Stacks
               </button>
             )}
@@ -822,47 +822,47 @@ export default function AdminPage() {
 
       <main className="flex-1 py-12 px-6">
         <div className="max-w-xl mx-auto">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Create & Manage SafeFlows</h2>
-          <p className="text-gray-600 mb-8">Bridge USDC to USDCx and create programmable payment streams.</p>
+          <h2 className="text-2xl text-white mb-2 uppercase tracking-widest">Create & Manage</h2>
+          <p className="text-gray-400 mb-8 font-mono text-sm">Bridge USDC to USDCx and create programmable payment streams.</p>
 
           {error && (
-            <div className="mb-6 p-4 border border-red-200 bg-red-50 rounded-lg text-red-700">
-              {error}
+            <div className="mb-6 p-4 border-2 border-red-500 bg-black text-red-500 font-mono text-xs">
+              ERROR: {error}
             </div>
           )}
           {success && (
-            <div className="mb-6 p-4 border border-green-200 bg-green-50 rounded-lg text-green-700">
-              {success}
+            <div className="mb-6 p-4 border-2 border-green-500 bg-black text-green-500 font-mono text-xs">
+              SUCCESS: {success}
             </div>
           )}
 
-          <div className="flex gap-4 mb-8 border-b border-gray-200">
+          <div className="flex gap-4 mb-8 border-b-2 border-gray-800">
             <button
               onClick={() => setActiveTab('bridge')}
-              className={`pb-3 px-1 text-sm font-medium transition-colors ${
+              className={`pb-3 px-1 text-sm font-medium transition-none uppercase tracking-wider ${
                 activeTab === 'bridge'
                   ? 'text-orange-500 border-b-2 border-orange-500'
-                  : 'text-gray-500 hover:text-gray-700'
+                  : 'text-gray-500 hover:text-gray-300'
               }`}
             >
               Bridge USDC
             </button>
             <button
               onClick={() => setActiveTab('create')}
-              className={`pb-3 px-1 text-sm font-medium transition-colors ${
+              className={`pb-3 px-1 text-sm font-medium transition-none uppercase tracking-wider ${
                 activeTab === 'create'
                   ? 'text-orange-500 border-b-2 border-orange-500'
-                  : 'text-gray-500 hover:text-gray-700'
+                  : 'text-gray-500 hover:text-gray-300'
               }`}
             >
               Create SafeFlow
             </button>
             <button
               onClick={() => setActiveTab('manage')}
-              className={`pb-3 px-1 text-sm font-medium transition-colors ${
+              className={`pb-3 px-1 text-sm font-medium transition-none uppercase tracking-wider ${
                 activeTab === 'manage'
                   ? 'text-orange-500 border-b-2 border-orange-500'
-                  : 'text-gray-500 hover:text-gray-700'
+                  : 'text-gray-500 hover:text-gray-300'
               }`}
             >
               Manage ({mySafeFlows.length})
@@ -873,18 +873,18 @@ export default function AdminPage() {
             <div className="space-y-6">
               {/* USDCx Balance Display */}
               {user.isConnected && (
-                <div className="card bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
+                <div className="card bg-black border-2 border-orange-500">
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-sm text-gray-600">Your USDCx Balance on Stacks</p>
-                      <p className="text-2xl font-bold text-orange-600">${formatUSDCx(usdcxBalance)} USDCx</p>
+                      <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Your USDCx Balance on Stacks</p>
+                      <p className="text-2xl font-mono text-orange-500">${formatUSDCx(usdcxBalance)} USDCx</p>
                     </div>
                     <button
                       onClick={fetchUsdcxBalance}
-                      className="text-orange-500 hover:text-orange-600 p-2"
+                      className="text-orange-500 hover:text-white p-2 transition-none"
                       title="Refresh balance"
                     >
-                      🔄
+                      REFRESH
                     </button>
                   </div>
                 </div>
@@ -892,55 +892,55 @@ export default function AdminPage() {
 
               {/* Pending Bridge Transactions */}
               {pendingBridgeTxs.filter(tx => tx.status === 'pending').length > 0 && (
-                <div className="card border-yellow-200 bg-yellow-50">
-                  <h4 className="font-bold text-yellow-800 mb-3 flex items-center gap-2">
-                    <span className="animate-pulse">⏳</span> Pending Bridge Transactions
+                <div className="card border-2 border-yellow-500 bg-black">
+                  <h4 className="font-bold text-yellow-500 mb-3 flex items-center gap-2 uppercase text-sm tracking-wider">
+                    <span className="animate-pulse">[WAITING]</span> Pending Bridge
                   </h4>
                   <div className="space-y-2">
                     {pendingBridgeTxs.filter(tx => tx.status === 'pending').map(tx => {
                       const elapsed = Math.floor((Date.now() - tx.timestamp) / 60000);
                       return (
-                        <div key={tx.txHash} className="flex items-center justify-between text-sm p-2 bg-white rounded border border-yellow-100">
+                        <div key={tx.txHash} className="flex items-center justify-between text-xs p-2 border border-gray-800 font-mono">
                           <div>
-                            <p className="font-medium">{tx.amount} USDC</p>
-                            <p className="text-xs text-gray-500">{elapsed} min ago</p>
+                            <p className="text-white">{tx.amount} USDC</p>
+                            <p className="text-gray-500">{elapsed} min ago</p>
                           </div>
                           <div className="text-right">
                             <a
                               href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-orange-500 hover:text-orange-600 text-xs underline"
+                              className="text-orange-500 hover:text-white underline"
                             >
-                              View on Etherscan ↗
+                              ETHERSCAN ↗
                             </a>
-                            <p className="text-xs text-yellow-600 mt-1">~{Math.max(0, 15 - elapsed)}-{Math.max(0, 30 - elapsed)} min remaining</p>
+                            <p className="text-yellow-600 mt-1">~{Math.max(0, 15 - elapsed)}-{Math.max(0, 30 - elapsed)} min remaining</p>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                  <p className="text-xs text-yellow-700 mt-3">
-                    💡 Your USDCx balance will update automatically when the bridge completes.
+                  <p className="text-xs text-gray-500 mt-3 font-mono">
+                    > Your USDCx balance will update automatically when the bridge completes.
                   </p>
                 </div>
               )}
 
               {/* Recently Completed Bridges */}
               {pendingBridgeTxs.filter(tx => tx.status === 'completed').length > 0 && (
-                <div className="card border-green-200 bg-green-50">
-                  <h4 className="font-bold text-green-800 mb-2 flex items-center gap-2">
-                    ✅ Recently Completed
+                <div className="card border-2 border-green-500 bg-black">
+                  <h4 className="font-bold text-green-500 mb-2 flex items-center gap-2 uppercase text-sm tracking-wider">
+                    [DONE] Recently Completed
                   </h4>
                   <div className="space-y-1">
                     {pendingBridgeTxs.filter(tx => tx.status === 'completed').slice(0, 3).map(tx => (
-                      <div key={tx.txHash} className="flex justify-between text-sm">
-                        <span className="text-green-700">{tx.amount} USDC → USDCx</span>
+                      <div key={tx.txHash} className="flex justify-between text-xs font-mono">
+                        <span className="text-green-500">{tx.amount} USDC → USDCx</span>
                         <a
                           href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-green-600 text-xs underline"
+                          className="text-green-500 underline"
                         >
                           tx ↗
                         </a>
@@ -952,32 +952,32 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="card">
-                  <p className="text-sm text-gray-500 mb-1">Ethereum Sepolia</p>
+                  <p className="text-xs text-gray-500 mb-1 uppercase">Ethereum Sepolia</p>
                   {evmWallet.isConnected ? (
                     <>
-                      <p className="font-mono text-sm">{evmWallet.address?.slice(0, 12)}...</p>
-                      <p className="text-orange-500">{parseFloat(evmWallet.usdcBalance).toFixed(2)} USDC</p>
+                      <p className="font-mono text-sm text-white mb-1">{evmWallet.address?.slice(0, 12)}...</p>
+                      <p className="text-orange-500 font-mono">{parseFloat(evmWallet.usdcBalance).toFixed(2)} USDC</p>
                     </>
                   ) : (
-                    <button onClick={connectEvmWallet} className="btn-secondary w-full mt-2 text-sm py-2">
-                      Connect
+                    <button onClick={connectEvmWallet} className="btn-secondary w-full mt-2 text-xs py-2">
+                      CONNECT
                     </button>
                   )}
                 </div>
                 <div className="card">
-                  <p className="text-sm text-gray-500 mb-1">Stacks Testnet</p>
+                  <p className="text-xs text-gray-500 mb-1 uppercase">Stacks Testnet</p>
                   {user.isConnected ? (
-                    <p className="font-mono text-sm">{user.address?.slice(0, 12)}...</p>
+                    <p className="font-mono text-sm text-white">{user.address?.slice(0, 12)}...</p>
                   ) : (
-                    <button onClick={connectWallet} className="btn-primary w-full mt-2 text-sm py-2">
-                      Connect
+                    <button onClick={connectWallet} className="btn-primary w-full mt-2 text-xs py-2">
+                      CONNECT
                     </button>
                   )}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-2">Amount (USDC)</label>
+                <label className="block text-xs uppercase tracking-widest text-gray-500 mb-2">Amount (USDC)</label>
                 <input
                   type="text"
                   value={bridgeAmount}
@@ -992,10 +992,10 @@ export default function AdminPage() {
                 disabled={!evmWallet.isConnected || !user.isConnected || isLoading || !bridgeAmount}
                 className="btn-primary w-full"
               >
-                {isLoading ? 'Processing...' : 'Bridge to Stacks (USDCx)'}
+                {isLoading ? 'PROCESSING...' : 'BRIDGE TO STACKS (USDCx)'}
               </button>
               
-              <p className="text-sm text-gray-500 text-center">
+              <p className="text-xs text-gray-600 text-center font-mono">
                 USDC will be converted to USDCx on Stacks via Circle xReserve. Takes ~10-30 minutes.
               </p>
             </div>
@@ -1004,27 +1004,27 @@ export default function AdminPage() {
           {activeTab === 'create' && (
             <div className="space-y-6">
               {!user.isConnected && (
-                <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-lg text-yellow-700">
+                <div className="p-4 border-2 border-yellow-500 bg-black text-yellow-500 font-mono text-xs">
                   Connect your Stacks wallet to create a SafeFlow.
                 </div>
               )}
 
               {user.isConnected && (
-                <div className="p-4 border border-orange-200 bg-orange-50 rounded-lg">
+                <div className="p-4 border-2 border-orange-500 bg-black">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Your USDCx Balance:</span>
-                    <span className="font-bold text-orange-600 text-lg">${formatUSDCx(usdcxBalance)} USDCx</span>
+                    <span className="text-xs uppercase text-gray-400">Your USDCx Balance:</span>
+                    <span className="font-mono text-orange-500 text-lg">${formatUSDCx(usdcxBalance)} USDCx</span>
                   </div>
                   {usdcxBalance === 0n && (
-                    <p className="text-sm text-orange-700 mt-2">
-                      You need USDCx to create a SafeFlow. <button onClick={() => setActiveTab('bridge')} className="underline font-medium">Bridge USDC first →</button>
+                    <p className="text-xs text-orange-700 mt-2 font-mono">
+                      > You need USDCx to create a SafeFlow. <button onClick={() => setActiveTab('bridge')} className="underline font-bold uppercase">Bridge USDC first</button>
                     </p>
                   )}
                 </div>
               )}
 
               <div>
-                <label className="block text-sm text-gray-600 mb-2">Title *</label>
+                <label className="block text-xs uppercase tracking-widest text-gray-500 mb-2">Title *</label>
                 <input
                   type="text"
                   value={title}
@@ -1036,7 +1036,7 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-2">Description</label>
+                <label className="block text-xs uppercase tracking-widest text-gray-500 mb-2">Description</label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -1047,7 +1047,7 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-2">Recipient Address *</label>
+                <label className="block text-xs uppercase tracking-widest text-gray-500 mb-2">Recipient Address *</label>
                 <input
                   type="text"
                   value={recipientAddress}
@@ -1059,7 +1059,7 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-600 mb-2">Total Amount (USDCx) *</label>
+                  <label className="block text-xs uppercase tracking-widest text-gray-500 mb-2">Total Amount (USDCx) *</label>
                   <input
                     type="text"
                     value={totalAmount}
@@ -1069,7 +1069,7 @@ export default function AdminPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-2">Drip Per Period *</label>
+                  <label className="block text-xs uppercase tracking-widest text-gray-500 mb-2">Drip Per Period *</label>
                   <input
                     type="text"
                     value={dripAmount}
@@ -1081,24 +1081,24 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-2">Drip Interval</label>
+                <label className="block text-xs uppercase tracking-widest text-gray-500 mb-2">Drip Interval</label>
                 <div className="flex gap-4">
                   <button
                     onClick={() => setDripInterval('daily')}
-                    className={`flex-1 py-2 rounded-lg border transition-colors ${
+                    className={`flex-1 py-2 border-2 uppercase tracking-wide transition-none text-sm ${
                       dripInterval === 'daily'
-                        ? 'border-orange-500 text-orange-500 bg-orange-50'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                        ? 'border-orange-500 text-orange-500 bg-black'
+                        : 'border-gray-800 text-gray-500 hover:border-gray-600'
                     }`}
                   >
                     Daily
                   </button>
                   <button
                     onClick={() => setDripInterval('monthly')}
-                    className={`flex-1 py-2 rounded-lg border transition-colors ${
+                    className={`flex-1 py-2 border-2 uppercase tracking-wide transition-none text-sm ${
                       dripInterval === 'monthly'
-                        ? 'border-orange-500 text-orange-500 bg-orange-50'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                        ? 'border-orange-500 text-orange-500 bg-black'
+                        : 'border-gray-800 text-gray-500 hover:border-gray-600'
                     }`}
                   >
                     Monthly
@@ -1111,7 +1111,7 @@ export default function AdminPage() {
                 disabled={!user.isConnected || isLoading || !recipientAddress || !totalAmount || !dripAmount || !title}
                 className="btn-primary w-full"
               >
-                {isLoading ? 'Processing...' : 'Create SafeFlow'}
+                {isLoading ? 'PROCESSING...' : 'CREATE SAFEFLOW'}
               </button>
             </div>
           )}
@@ -1120,15 +1120,15 @@ export default function AdminPage() {
             <div className="space-y-6">
               {!user.isConnected ? (
                 <div className="text-center py-12">
-                  <p className="text-gray-500 mb-4">Connect your wallet to see your SafeFlows</p>
+                  <p className="text-gray-500 mb-4 uppercase text-sm">Connect your wallet to see your SafeFlows</p>
                   <button onClick={connectWallet} className="btn-primary">
                     Connect Wallet
                   </button>
                 </div>
               ) : mySafeFlows.length === 0 ? (
                 <div className="text-center py-12">
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">No SafeFlows Yet</h3>
-                  <p className="text-gray-500 mb-4">Create your first SafeFlow to start streaming payments.</p>
+                  <h3 className="text-lg text-white mb-2 uppercase tracking-wide">No SafeFlows Yet</h3>
+                  <p className="text-gray-500 mb-4 text-sm">Create your first SafeFlow to start streaming payments.</p>
                   <button onClick={() => setActiveTab('create')} className="btn-primary">
                     Create SafeFlow
                   </button>
@@ -1138,30 +1138,30 @@ export default function AdminPage() {
                   {mySafeFlows.map((sf) => (
                     <div
                       key={sf.id}
-                      className={`card cursor-pointer transition-colors ${
-                        selectedSafeFlow?.id === sf.id ? 'ring-2 ring-orange-500' : ''
+                      className={`card cursor-pointer transition-none ${
+                        selectedSafeFlow?.id === sf.id ? 'border-orange-500' : 'hover:border-gray-600'
                       }`}
                       onClick={() => setSelectedSafeFlow(selectedSafeFlow?.id === sf.id ? null : sf)}
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-bold text-gray-900">{sf.title}</h4>
-                        <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(sf.status)}`}>
+                        <h4 className="text-white uppercase tracking-wider">{sf.title}</h4>
+                        <span className={`px-2 py-0 border-2 text-xs uppercase tracking-widest font-bold ${getStatusColor(sf.status)}`}>
                           {getStatusText(sf.status)}
                         </span>
                       </div>
                       
-                      <p className="text-sm text-gray-500 mb-3 truncate">
-                        To: {sf.recipient.slice(0, 12)}...{sf.recipient.slice(-8)}
+                      <p className="text-xs text-gray-500 mb-3 truncate font-mono">
+                        TO: {sf.recipient.slice(0, 12)}...{sf.recipient.slice(-8)}
                       </p>
                       
-                      <div className="flex justify-between text-sm">
+                      <div className="flex justify-between text-xs mb-1 uppercase tracking-wider">
                         <span className="text-gray-500">Progress</span>
-                        <span className="text-gray-900">
+                        <span className="text-white">
                           ${formatUSDCx(sf.claimedAmount)} / ${formatUSDCx(sf.totalAmount)}
                         </span>
                       </div>
                       
-                      <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="mt-2 h-4 bg-gray-900 border border-gray-700 p-0.5">
                         <div 
                           className="h-full bg-orange-500"
                           style={{ width: `${Number(sf.claimedAmount * 100n / sf.totalAmount)}%` }}
@@ -1169,19 +1169,19 @@ export default function AdminPage() {
                       </div>
 
                       {selectedSafeFlow?.id === sf.id && (
-                        <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="mt-4 pt-4 border-t border-gray-800 border-dashed">
                           {sf.description && (
-                            <p className="text-sm text-gray-600 mb-4">{sf.description}</p>
+                            <p className="text-sm text-gray-400 mb-4 font-mono">{sf.description}</p>
                           )}
                           
                           <div className="grid grid-cols-2 gap-3 text-sm mb-4">
                             <div>
-                              <p className="text-gray-400">Remaining</p>
-                              <p className="font-mono">${formatUSDCx(sf.totalAmount - sf.claimedAmount)}</p>
+                              <p className="text-gray-500 text-xs uppercase">Remaining</p>
+                              <p className="font-mono text-white">${formatUSDCx(sf.totalAmount - sf.claimedAmount)}</p>
                             </div>
                             <div>
-                              <p className="text-gray-400">Rate</p>
-                              <p className="font-mono">{sf.dripInterval}</p>
+                              <p className="text-gray-500 text-xs uppercase">Rate</p>
+                              <p className="font-mono text-white uppercase">{sf.dripInterval}</p>
                             </div>
                           </div>
                           
@@ -1190,7 +1190,7 @@ export default function AdminPage() {
                               <button
                                 onClick={(e) => { e.stopPropagation(); freezeSafeFlow(sf.id); }}
                                 disabled={isLoading}
-                                className="flex-1 py-2 px-4 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors text-sm"
+                                className="flex-1 py-2 px-4 border-2 border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black transition-none uppercase tracking-wider text-xs font-bold"
                               >
                                 Freeze
                               </button>
@@ -1199,7 +1199,7 @@ export default function AdminPage() {
                               <button
                                 onClick={(e) => { e.stopPropagation(); unfreezeSafeFlow(sf.id); }}
                                 disabled={isLoading}
-                                className="flex-1 py-2 px-4 rounded-lg border border-green-200 text-green-600 hover:bg-green-50 transition-colors text-sm"
+                                className="flex-1 py-2 px-4 border-2 border-green-500 text-green-500 hover:bg-green-500 hover:text-black transition-none uppercase tracking-wider text-xs font-bold"
                               >
                                 Resume
                               </button>
@@ -1208,9 +1208,9 @@ export default function AdminPage() {
                               <button
                                 onClick={(e) => { e.stopPropagation(); cancelSafeFlow(sf.id); }}
                                 disabled={isLoading}
-                                className="flex-1 py-2 px-4 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors text-sm"
+                                className="flex-1 py-2 px-4 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-black transition-none uppercase tracking-wider text-xs font-bold"
                               >
-                                Cancel & Return USDCx
+                                Cancel
                               </button>
                             )}
                           </div>
@@ -1227,99 +1227,99 @@ export default function AdminPage() {
 
       {/* Bridging Modal */}
       {bridgingModal.isOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-black border-2 border-white p-6 max-w-md w-full mx-4 shadow-none">
             <div className="text-center">
               {bridgingModal.status === 'approving' && (
                 <>
-                  <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Approving USDC</h3>
+                  <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent animate-spin mx-auto mb-4" />
+                  <h3 className="text-xl text-white uppercase tracking-widest mb-2">Approving USDC</h3>
                 </>
               )}
               
               {bridgingModal.status === 'bridging' && (
                 <>
-                  <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Bridging USDC</h3>
+                  <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent animate-spin mx-auto mb-4" />
+                  <h3 className="text-xl text-white uppercase tracking-widest mb-2">Bridging USDC</h3>
                 </>
               )}
               
               {bridgingModal.status === 'pending' && (
                 <>
-                  <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-3xl">🌉</span>
+                  <div className="w-16 h-16 border-2 border-orange-500 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-xl font-mono text-orange-500">BRIDGE</span>
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Bridge in Progress!</h3>
+                  <h3 className="text-xl text-white uppercase tracking-widest mb-2">Bridge in Progress!</h3>
                 </>
               )}
               
               {bridgingModal.status === 'success' && (
                 <>
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-3xl">✓</span>
+                  <div className="w-16 h-16 border-2 border-green-500 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-3xl text-green-500 font-bold">OK</span>
                   </div>
-                  <h3 className="text-xl font-bold text-green-600 mb-2">Bridge Complete!</h3>
+                  <h3 className="text-xl text-green-500 uppercase tracking-widest mb-2">Bridge Complete!</h3>
                 </>
               )}
               
               {bridgingModal.status === 'error' && (
                 <>
-                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-3xl">✕</span>
+                  <div className="w-16 h-16 border-2 border-red-500 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-3xl text-red-500 font-bold">FAIL</span>
                   </div>
-                  <h3 className="text-xl font-bold text-red-600 mb-2">Bridge Failed</h3>
+                  <h3 className="text-xl text-red-500 uppercase tracking-widest mb-2">Bridge Failed</h3>
                 </>
               )}
               
-              <p className="text-gray-600 mb-4">{bridgingModal.message}</p>
+              <p className="text-gray-400 mb-4 font-mono text-sm">{bridgingModal.message}</p>
               
               {bridgingModal.txHash && (
                 <a 
                   href={`https://sepolia.etherscan.io/tx/${bridgingModal.txHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-orange-500 hover:text-orange-600 underline text-sm block mb-4"
+                  className="text-orange-500 hover:text-white underline text-sm block mb-4 font-mono"
                 >
-                  View on Etherscan ↗
+                  VIEW ON ETHERSCAN ↗
                 </a>
               )}
               
               {bridgingModal.status === 'pending' && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4 text-left">
-                  <p className="text-sm text-orange-700 mb-2">
-                    <strong>⏱ Estimated time:</strong> 15-30 minutes
+                <div className="bg-black border border-orange-500 p-4 mb-4 text-left">
+                  <p className="text-sm text-orange-500 mb-2 font-mono">
+                    <strong>ESTIMATED TIME:</strong> 15-30 minutes
                   </p>
-                  <p className="text-sm text-orange-700 mb-2">
-                    <strong>📍 What happens next:</strong>
+                  <p className="text-sm text-orange-500 mb-2 font-mono">
+                    <strong>WHAT HAPPENS NEXT:</strong>
                   </p>
-                  <ol className="text-sm text-orange-700 list-decimal list-inside space-y-1">
+                  <ol className="text-sm text-orange-500 list-decimal list-inside space-y-1 font-mono">
                     <li>Circle xReserve processes your deposit</li>
                     <li>Stacks attestation service verifies the transfer</li>
                     <li>USDCx is minted to your Stacks wallet</li>
                   </ol>
-                  <p className="text-sm text-orange-600 mt-3">
-                    💡 Stay on this page - your balance will update automatically!
+                  <p className="text-sm text-white mt-3 font-mono">
+                    > Stay on this page - your balance will update automatically!
                   </p>
                 </div>
               )}
               
               <button
                 onClick={() => setBridgingModal(prev => ({ ...prev, isOpen: false }))}
-                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-6 py-2 font-bold uppercase tracking-wider transition-none border-2 ${
                   bridgingModal.status === 'error' 
-                    ? 'bg-red-500 text-white hover:bg-red-600' 
-                    : 'bg-orange-500 text-white hover:bg-orange-600'
+                    ? 'border-red-500 text-red-500 hover:bg-red-500 hover:text-black' 
+                    : 'border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-black'
                 }`}
               >
-                {bridgingModal.status === 'pending' ? 'Got it!' : 'Close'}
+                {bridgingModal.status === 'pending' ? 'GOT IT' : 'CLOSE'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <footer className="border-t border-gray-200 py-6 px-6">
-        <div className="max-w-4xl mx-auto text-center text-sm text-gray-500">
+      <footer className="border-t-2 border-gray-800 py-6 px-6">
+        <div className="max-w-4xl mx-auto text-center text-xs text-gray-600 uppercase tracking-widest">
           SafeFlow — Programmable USDCx Payment Streams on Stacks
         </div>
       </footer>

@@ -7,7 +7,24 @@ const config: Config = {
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        orange: {
+          500: '#ff6600', // Brighter, more "hacker" orange
+          600: '#cc5200',
+        }
+      },
+      fontFamily: {
+        pixel: ['var(--font-pixel)', 'monospace'],
+      },
+      borderRadius: {
+        lg: '0',
+        xl: '0',
+        DEFAULT: '0',
+        md: '0',
+        sm: '0',
+      }
+    },
   },
   plugins: [],
 };

@@ -1,8 +1,10 @@
 /**
  * Bridge Utilities - USDC to USDCx bridging via Circle xReserve
+ * Using official xReserve encoding format from Stacks documentation
  */
 
 import { parseUnits, type Address, type Hex } from 'viem';
+import { c32addressDecode } from 'c32check';
 
 // Circle xReserve Contract on Ethereum Sepolia
 export const XRESERVE_ADDRESS: Address = '0x008888878f94C0d87defdf0B07f46B93C1934442';
@@ -16,30 +18,32 @@ export const STACKS_DOMAIN_ID = 10003;
 // USDC decimals
 export const USDC_DECIMALS = 6;
 
-// C32 character set for Stacks addresses
-const C32_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/**
+ * Encode Stacks address to bytes for xReserve remoteRecipient
+ * Uses official c32check library for proper decoding
+ */
+function encodeStacksAddress(stacksAddress: string): Uint8Array {
+  const [version, hashBytes] = c32addressDecode(stacksAddress);
+  
+  // Version byte (1 byte) + hash160 (20 bytes) = 21 bytes total
+  const result = new Uint8Array(21);
+  result[0] = version;
+  
+  // Convert hex string to bytes
+  for (let i = 0; i < 20; i++) {
+    result[i + 1] = parseInt(hashBytes.slice(i * 2, i * 2 + 2), 16);
+  }
+  
+  return result;
+}
 
 /**
- * Converts a Stacks address to 32-byte hex for xReserve
+ * Convert bytes to bytes32 format (left-padded with zeros)
  */
-export function stacksToHex32(stacksAddress: string): Hex {
-  if (!stacksAddress || stacksAddress.length < 2) {
-    throw new Error('Invalid Stacks address');
-  }
-
-  const normalized = stacksAddress.toUpperCase();
-  const prefix = normalized.substring(0, 2);
-  
-  if (prefix !== 'ST' && prefix !== 'SP') {
-    throw new Error(`Invalid Stacks address prefix: ${prefix}`);
-  }
-
-  const c32Chars = normalized.substring(1);
-  const bytes = c32Decode(c32Chars);
-  const addressBytes = bytes.slice(0, 21);
-  
+function bytes32FromBytes(bytes: Uint8Array): Hex {
   const padded = new Uint8Array(32);
-  padded.set(addressBytes, 32 - addressBytes.length);
+  // Put the address bytes at the END (right-aligned, left-padded with zeros)
+  padded.set(bytes, 32 - bytes.length);
   
   const hex = Array.from(padded)
     .map(b => b.toString(16).padStart(2, '0'))
@@ -48,33 +52,23 @@ export function stacksToHex32(stacksAddress: string): Hex {
   return `0x${hex}` as Hex;
 }
 
-function c32Decode(input: string): Uint8Array {
-  const c32Map: Record<string, number> = {};
-  for (let i = 0; i < C32_ALPHABET.length; i++) {
-    c32Map[C32_ALPHABET[i]] = i;
+/**
+ * Converts a Stacks address to 32-byte hex for xReserve depositToRemote
+ * This is the official encoding format used by Circle xReserve
+ */
+export function stacksToHex32(stacksAddress: string): Hex {
+  if (!stacksAddress || stacksAddress.length < 2) {
+    throw new Error('Invalid Stacks address');
   }
+
+  const prefix = stacksAddress.toUpperCase().substring(0, 2);
   
-  const bits: number[] = [];
-  for (const char of input) {
-    const value = c32Map[char];
-    if (value === undefined) {
-      throw new Error(`Invalid C32 character: ${char}`);
-    }
-    for (let i = 4; i >= 0; i--) {
-      bits.push((value >> i) & 1);
-    }
+  if (prefix !== 'ST' && prefix !== 'SP') {
+    throw new Error(`Invalid Stacks address prefix: ${prefix}`);
   }
-  
-  const bytes: number[] = [];
-  for (let i = 0; i + 8 <= bits.length; i += 8) {
-    let byte = 0;
-    for (let j = 0; j < 8; j++) {
-      byte = (byte << 1) | bits[i + j];
-    }
-    bytes.push(byte);
-  }
-  
-  return new Uint8Array(bytes);
+
+  const addressBytes = encodeStacksAddress(stacksAddress);
+  return bytes32FromBytes(addressBytes);
 }
 
 /**

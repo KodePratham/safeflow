@@ -3,8 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --orange-500: #f97316;
-  --orange-600: #ea580c;
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 0, 0, 0;
+  --background-end-rgb: 0, 0, 0;
 }
 
 * {
@@ -16,27 +17,54 @@
 html,
 body {
   min-height: 100vh;
+  background-color: #000;
 }
 
 body {
-  background: #ffffff;
-  color: #1a1a1a;
-  font-family: system-ui, -apple-system, sans-serif;
+  color: #fff;
+  font-family: var(--font-pixel), monospace;
+  font-size: 18px;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+label {
+  text-transform: uppercase;
+  font-size: 0.9em;
+  letter-spacing: 0.05em;
+  color: #888;
 }
 
 .btn-primary {
-  @apply px-6 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply px-4 py-2 bg-orange-500 text-black font-bold border-2 border-orange-500 hover:bg-black hover:text-orange-500 transition-none disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider;
 }
 
 .btn-secondary {
-  @apply px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors;
+  @apply px-4 py-2 border-2 border-white text-white font-bold bg-transparent hover:bg-white hover:text-black transition-none uppercase tracking-wider;
 }
 
 .input {
-  @apply w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent;
+  @apply w-full px-4 py-3 bg-black border-2 border-gray-700 text-white placeholder-gray-600 focus:outline-none focus:border-orange-500 font-mono transition-none rounded-none;
 }
 
 .card {
-  @apply bg-white border border-gray-200 rounded-xl p-6;
+  @apply bg-black border-2 border-gray-800 p-6 rounded-none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #000; 
+}
+::-webkit-scrollbar-thumb {
+  background: #333; 
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ff6600; 
 }
 

@@ -1,12 +1,16 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { VT323 } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const pixelFont = VT323({ 
+  weight: '400',
+  subsets: ['latin'],
+  variable: '--font-pixel',
+});
 
 export const metadata: Metadata = {
-  title: 'SafeFlow - Bitcoin-Native Programmable Payments',
-  description: 'Cross-chain streaming vault for USDCx on Stacks',
+  title: 'SafeFlow - Programmable Payments',
+  description: 'Cross-chain streaming vault',
 };
 
 export default function RootLayout({
@@ -16,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={pixelFont.className}>{children}</body>
     </html>
   );
 }
