@@ -1,0 +1,44 @@
+[project]
+name = "safeflow"
+description = "Bitcoin-Native Programmable Payments - Cross-chain streaming vault for USDCx"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+# Blockchain simulation settings
+[repl.analysis]
+passes = ["check_checker"]
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+# Network configurations
+[project.requirements]
+
+[[project.requirements]]
+contract_id = "ST1NXBK3K5YYMD6FD41MVNP3JS1GABZ8TRVX023PT.sip-010-trait-ft-standard"
+
+[repl]
+costs_version = 2
+parser_version = 2
+analysis = { passes = ["check_checker"] }
+
+# ============================================
+# CONTRACT DEFINITIONS
+# ============================================
+
+# SIP-010 Trait (local copy for testing)
+[contracts.sip-010-trait]
+path = "contracts/traits/sip-010-trait.clar"
+clarity_version = 2
+epoch = 2.5
+
+# USDCx Token (mock for testing)
+[contracts.usdcx]
+path = "contracts/usdcx.clar"
+clarity_version = 2
+epoch = 2.5
+
+# DevPayments - Developer Payment Management
+[contracts.dev-payments]
+path = "contracts/dev-payments.clar"
+clarity_version = 2
+epoch = 2.5
