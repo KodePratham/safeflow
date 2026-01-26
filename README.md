@@ -2,56 +2,79 @@
 
 A cross-chain bridge and streaming vault that enables users to bridge USDC from Ethereum Sepolia to Stacks Testnet. Once converted to USDCx, funds are locked in a Clarity smart contract and "dripped" to recipients based on Bitcoin block height.
 
-## 🌟 Features
+## Features
 
-- **Cross-Chain Bridge**: Bridge USDC from Ethereum to Stacks via Circle's xReserve protocol
-- **Streaming Payments**: Create linear payment streams based on Bitcoin block height
-- **Secure Vault**: Funds locked in auditable Clarity smart contracts
-- **Post-Conditions**: Frontend prevents over-spending with Stacks post-conditions
+- Cross-Chain Bridge: Bridge USDC from Ethereum to Stacks via Circle's xReserve protocol
+- Streaming Payments: Create linear payment streams based on Bitcoin block height
+- Secure Vault: Funds locked in auditable Clarity smart contracts
+- Post-Conditions: Frontend prevents over-spending with Stacks post-conditions
+- Stream Management: Freeze, cancel, or claim payments from active streams
 
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│   Ethereum      │       │  Circle         │       │   Stacks        │
-│   Sepolia       │──────▶│  xReserve       │──────▶│   Testnet       │
-│   (USDC)        │       │  Bridge         │       │   (USDCx)       │
-└─────────────────┘       └─────────────────┘       └─────────────────┘
-                                                            │
-                                                            ▼
-                                                    ┌─────────────────┐
-                                                    │   SafeFlow      │
-                                                    │   Smart Contract│
-                                                    │   (Streaming)   │
-                                                    └─────────────────┘
+Ethereum Sepolia (USDC)
+        |
+        | xReserve Bridge
+        |
+        v
+Circle Protocol
+        |
+        v
+Stacks Testnet (USDCx)
+        |
+        v
+SafeFlow Smart Contract (Streaming Vault)
+        |
+        v
+Next.js Dashboard
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 safeflow/
 ├── contracts/
-│   └── safeflow.clar          # Clarity streaming vault contract
+│   ├── safeflow.clar                 # Main streaming vault contract
+│   ├── dev-payments.clar             # Development payment contract
+│   ├── usdcx.clar                    # USDCx token implementation
+│   └── traits/
+│       └── sip-010-trait.clar        # Token trait definition
 ├── src/
-│   ├── components/
-│   │   └── Dashboard.tsx      # Main Next.js dashboard
-│   └── lib/
-│       └── bridge-utils.ts    # Ethereum bridge utilities
-├── Clarinet.toml              # Clarinet configuration
-├── package.json               # Node.js dependencies
-└── README.md
+│   ├── app/
+│   │   ├── layout.tsx                # Application layout
+│   │   ├── page.tsx                  # Home page
+│   │   ├── admin/
+│   │   │   └── page.tsx              # Admin dashboard
+│   │   └── verify/
+│   │       └── page.tsx              # Verification page
+│   ├── components/                   # Reusable React components
+│   ├── lib/
+│   │   └── bridge-utils.ts           # Ethereum bridge utilities
+│   └── types/
+│       └── ethereum.d.ts             # Ethereum type definitions
+├── tests/
+│   ├── dev-payments_test.ts          # Dev payment contract tests
+│   └── safeflow_test.ts              # SafeFlow contract tests
+├── docs/
+│   ├── CLARINET_SETUP.md             # Clarinet installation guide
+│   └── XRESERVE.md                   # xReserve protocol details
+├── deployments/
+│   └── default.testnet-plan.yaml     # Testnet deployment plan
+├── settings/
+│   ├── Devnet.toml                   # Local development config
+│   ├── Simnet.toml                   # Simulation config
+│   └── Testnet.toml                  # Testnet config
+├── Clarinet.toml                     # Clarinet project config
+├── package.json                      # Node.js dependencies
+├── tsconfig.json                     # TypeScript configuration
+├── next.config.js                    # Next.js configuration
+├── tailwind.config.ts                # Tailwind CSS configuration
+├── postcss.config.js                 # PostCSS configuration
+└── README.md                         # This file
 ```
 
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js >= 18.0.0
-- [Clarinet](https://docs.hiro.so/clarinet) for Clarity development
-- MetaMask or compatible Ethereum wallet
-- Leather or Xverse wallet for Stacks
-
-### Installation
+## Installation
 
 ```bash
 # Clone the repository
@@ -65,7 +88,7 @@ npm install
 npm run dev
 ```
 
-### Clarity Contract Development
+## Clarity Contract Development
 
 ```bash
 # Check contract syntax
@@ -78,7 +101,7 @@ clarinet test
 clarinet console
 ```
 
-## 📜 Smart Contract
+## Smart Contract Overview
 
 ### Key Functions
 
@@ -93,7 +116,7 @@ clarinet console
 | `get-claimable-amount` | Read-only: Calculate claimable amount |
 | `get-safeflow` | Read-only: Get SafeFlow details by ID |
 
-### SafeFlow Statuses
+### Stream Statuses
 
 | Status | Value | Description |
 |--------|-------|-------------|
@@ -101,31 +124,31 @@ clarinet console
 | Frozen | 2 | Paused, no dripping, can be resumed |
 | Cancelled | 3 | Terminated, remaining USDCx returned to admin |
 
-### Streaming Math
+### Linear Vesting Formula
 
-The contract uses **linear vesting** based on Bitcoin block height:
+The contract uses Bitcoin block height-based linear vesting:
 
 ```
-claimable = (elapsed_blocks / total_blocks) × total_amount - claimed_amount
+claimable = (elapsed_blocks / total_blocks) * total_amount - claimed_amount
 ```
 
 Where:
 - `elapsed_blocks = current_block - start_block`
 - `total_blocks = end_block - start_block`
 
-## 🌉 Bridge Integration
+## Circle xReserve Bridge
 
-### Circle xReserve
+### xReserve Configuration
 
 | Parameter | Value |
 |-----------|-------|
-| xReserve Address | `0x008888878f94C0d87defdf0B07f46B93C1934442` |
+| xReserve Contract | `0x008888878f94C0d87defdf0B07f46B93C1934442` |
 | Stacks Domain ID | `10003` |
 | Network | Sepolia Testnet |
 
-### Converting Addresses
+### Address Conversion
 
-The `stacksToHex32` function converts Stacks C32 addresses to 32-byte hex for Ethereum:
+The `stacksToHex32` function converts Stacks C32 addresses to 32-byte hex format for Ethereum:
 
 ```typescript
 import { stacksToHex32 } from '@/lib/bridge-utils';
@@ -134,7 +157,7 @@ const hex = stacksToHex32('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM');
 // Returns: 0x00000000000000000000000000...
 ```
 
-## 🔐 Security: Post-Conditions
+## Security: Post-Conditions
 
 The frontend uses Stacks post-conditions to prevent unexpected token transfers:
 
@@ -149,7 +172,7 @@ const postConditions = [
 ];
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -169,9 +192,9 @@ NEXT_PUBLIC_USDCX_CONTRACT=ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.usdcx
 | USDCx | `ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.usdcx` |
 | SIP-010 Trait | `ST1NXBK3K5YYMD6FD41MVNP3JS1GABZ8TRVX023PT.sip-010-trait-ft-standard` |
 
-## 📊 API Reference
+## Bridge Utilities API
 
-### Bridge Utils
+### Bridging USDC
 
 ```typescript
 // Bridge USDC from Ethereum to Stacks
@@ -185,7 +208,7 @@ formatUSDC(1000000n)  // "1"
 parseUSDC("1.5")      // 1500000n
 ```
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run Clarity unit tests
@@ -195,12 +218,24 @@ clarinet test
 npm test
 ```
 
-## 📄 License
+## Deployment
 
-MIT License - see [LICENSE](LICENSE) for details.
+For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## 🙏 Acknowledgments
+Quick steps:
+1. Configure environment in `.env.local`
+2. Run `clarinet deployments generate --testnet`
+3. Run `clarinet deployments apply --testnet`
+4. Update contract addresses after deployment
 
-- [Stacks Foundation](https://stacks.org) for the Clarity language
-- [Circle](https://circle.com) for the xReserve bridge protocol
-- [Hiro](https://hiro.so) for developer tooling
+For Clarinet setup instructions, see [docs/CLARINET_SETUP.md](docs/CLARINET_SETUP.md).
+
+## License
+
+MIT License - see LICENSE for details.
+
+## Acknowledgments
+
+- Stacks Foundation for the Clarity language
+- Circle for the xReserve bridge protocol
+- Hiro for developer tooling and Clarinet
